@@ -4,8 +4,7 @@ import { buildClipboardHtml } from "./figma-encoder.js";
 var I18N = {
   ko: {
     scope: "범위 선택", full: "전체 페이지", pick: "영역 선택", resolution: "캡처 해상도",
-    current: "현재 브라우저 그대로", copy: "클립보드로 복사", donate: "☕ 개발자 후원",
-    scan: "토스 앱으로 QR을 스캔해 주세요",
+    current: "현재 브라우저 그대로", copy: "클립보드로 복사",
     capturing: "캡처 중...", resizing: "해상도 적용 중...", images: "이미지 색상 추출 중...", encoding: "변환 중...",
     success: "정상적으로 클립보드에 복사되었습니다.\n피그마에서 Ctrl+V 하세요.",
     error: "문제로 에러가 발생하였습니다. (에러코드 {code})",
@@ -15,8 +14,7 @@ var I18N = {
   },
   en: {
     scope: "Capture area", full: "Full page", pick: "Pick element", resolution: "Resolution",
-    current: "Current browser size", copy: "Copy to clipboard", donate: "☕ Support developer",
-    scan: "Scan the QR with the Toss app",
+    current: "Current browser size", copy: "Copy to clipboard",
     capturing: "Capturing...", resizing: "Applying resolution...", images: "Extracting image colors...", encoding: "Converting...",
     success: "Copied to clipboard.\nPress Ctrl+V in Figma.",
     error: "An error occurred. (code {code})",
@@ -26,8 +24,7 @@ var I18N = {
   },
   zh: {
     scope: "捕获范围", full: "整个页面", pick: "选择区域", resolution: "分辨率",
-    current: "当前浏览器尺寸", copy: "复制到剪贴板", donate: "☕ 支持开发者",
-    scan: "请用 Toss 应用扫描二维码",
+    current: "当前浏览器尺寸", copy: "复制到剪贴板",
     capturing: "捕获中...", resizing: "应用分辨率中...", images: "提取图片颜色中...", encoding: "转换中...",
     success: "已成功复制到剪贴板。\n请在 Figma 中按 Ctrl+V。",
     error: "发生错误。(错误代码 {code})",
@@ -37,8 +34,7 @@ var I18N = {
   },
   ja: {
     scope: "キャプチャ範囲", full: "ページ全体", pick: "要素を選択", resolution: "解像度",
-    current: "現在のブラウザサイズ", copy: "クリップボードにコピー", donate: "☕ 開発者を応援",
-    scan: "Toss アプリで QR をスキャンしてください",
+    current: "現在のブラウザサイズ", copy: "クリップボードにコピー",
     capturing: "キャプチャ中...", resizing: "解像度を適用中...", images: "画像の色を抽出中...", encoding: "変換中...",
     success: "クリップボードにコピーしました。\nFigma で Ctrl+V を押してください。",
     error: "エラーが発生しました。(エラーコード {code})",
@@ -257,12 +253,6 @@ document.getElementById("copy").addEventListener("click", async function () {
     }
     btn.disabled = false;
   }
-});
-
-/* ═══ 후원 접기/펼치기 ═══ */
-var _dt = document.getElementById("donateToggle");
-if (_dt) _dt.addEventListener("click", function () {
-  document.getElementById("donate").classList.toggle("open");
 });
 
 /* ═══ 초기화: 언어·선택영역 복원 ═══ */
