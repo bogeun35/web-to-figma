@@ -35,10 +35,8 @@
 
 크롬 웹스토어 게시 전이므로 개발자 모드로 설치합니다.
 
-1. 이 저장소를 내려받거나 클론합니다.
-   ```bash
-   git clone https://github.com/bogeun35/web-to-figma.git
-   ```
+1. [최신 릴리스](https://github.com/bogeun35/web-to-figma/releases/latest)에서 zip을 내려받아 압축을 풉니다.
+   (또는 저장소를 클론: `git clone https://github.com/bogeun35/web-to-figma.git`)
 2. 크롬 주소창에 `chrome://extensions` 를 입력합니다.
 3. 우측 상단 **개발자 모드**를 켭니다.
 4. **압축해제된 확장 프로그램을 로드** → 내려받은 폴더의 `extension` 디렉터리를 선택합니다.
