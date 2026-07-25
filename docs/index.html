@@ -4,151 +4,304 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Web to Figma — 웹페이지를 피그마 레이어로</title>
-<meta name="description" content="크롬 확장 프로그램. 웹페이지를 캡처해 편집 가능한 피그마 레이어로 클립보드에 복사합니다. 텍스트·벡터 아이콘·색상까지 그대로.">
+<meta name="description" content="Chrome extension that copies any webpage into Figma as editable layers. Text stays text, icons stay vectors.">
+<meta property="og:title" content="Web to Figma">
+<meta property="og:description" content="Copy any webpage into Figma as editable layers">
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   :root{
-    --bg:#ffffff; --fg:#1e1e1e; --muted:#8c8c8c; --line:#ececec; --card:#fafafa;
-    --blue:#0D99FF; --red:#F24E1E; --purple:#A259FF; --cyan:#1ABCFE; --green:#0ACF83;
+    --bg:#fff; --bg2:#fafafa; --fg:#1e1e1e; --fg2:#5c5c5c; --muted:#8c8c8c; --line:#e9e9e9;
+    --blue:#0D99FF; --blue-d:#0B87E0; --blue-l:#E5F4FF;
+    --red:#F24E1E; --purple:#A259FF; --cyan:#1ABCFE; --green:#0ACF83;
+    --shadow:0 1px 3px rgba(0,0,0,.05), 0 8px 24px -8px rgba(0,0,0,.08);
+    --code-bg:#f5f5f5;
   }
-  @media (prefers-color-scheme: dark){
-    :root{ --bg:#1e1e1e; --fg:#f5f5f5; --muted:#9a9a9a; --line:#2f2f2f; --card:#262626; }
+  @media (prefers-color-scheme:dark){
+    :root{ --bg:#191919; --bg2:#212121; --fg:#f0f0f0; --fg2:#b8b8b8; --muted:#8f8f8f; --line:#2e2e2e;
+      --blue-l:#0d2d45; --shadow:0 1px 3px rgba(0,0,0,.3), 0 8px 24px -8px rgba(0,0,0,.5); --code-bg:#242424; }
   }
-  :root[data-theme="dark"]{ --bg:#1e1e1e; --fg:#f5f5f5; --muted:#9a9a9a; --line:#2f2f2f; --card:#262626; }
-  :root[data-theme="light"]{ --bg:#ffffff; --fg:#1e1e1e; --muted:#8c8c8c; --line:#ececec; --card:#fafafa; }
+  :root[data-theme="dark"]{ --bg:#191919; --bg2:#212121; --fg:#f0f0f0; --fg2:#b8b8b8; --muted:#8f8f8f;
+    --line:#2e2e2e; --blue-l:#0d2d45; --shadow:0 1px 3px rgba(0,0,0,.3), 0 8px 24px -8px rgba(0,0,0,.5); --code-bg:#242424; }
+  :root[data-theme="light"]{ --bg:#fff; --bg2:#fafafa; --fg:#1e1e1e; --fg2:#5c5c5c; --muted:#8c8c8c;
+    --line:#e9e9e9; --blue-l:#E5F4FF; --shadow:0 1px 3px rgba(0,0,0,.05), 0 8px 24px -8px rgba(0,0,0,.08); --code-bg:#f5f5f5; }
 
+  html{scroll-behavior:smooth}
   body{background:var(--bg);color:var(--fg);
     font-family:Inter,-apple-system,'Segoe UI','Noto Sans KR','Malgun Gothic',sans-serif;
-    line-height:1.65;-webkit-font-smoothing:antialiased}
-  .wrap{max-width:860px;margin:0 auto;padding:0 24px}
+    line-height:1.65;-webkit-font-smoothing:antialiased;font-size:15px}
+  .wrap{max-width:920px;margin:0 auto;padding:0 24px}
   a{color:var(--blue);text-decoration:none}
   a:hover{text-decoration:underline}
+  img{max-width:100%;display:block}
 
-  /* hero */
-  header{padding:72px 0 56px;border-bottom:1px solid var(--line)}
-  .logo{display:grid;grid-template-columns:16px 16px;gap:5px;margin-bottom:22px}
-  .logo i{width:16px;height:16px;border-radius:50%;display:block}
-  .logo i:nth-child(1){background:var(--red)}
-  .logo i:nth-child(2){background:var(--purple)}
-  .logo i:nth-child(3){background:var(--cyan)}
-  .logo i:nth-child(4){background:var(--green)}
-  h1{font-size:clamp(30px,5.4vw,46px);font-weight:800;letter-spacing:-.02em;line-height:1.2}
-  .tagline{font-size:clamp(15px,2.4vw,19px);color:var(--muted);margin-top:14px;max-width:44em}
-  .cta{display:flex;flex-wrap:wrap;gap:10px;margin-top:30px}
-  .btn{display:inline-block;padding:11px 20px;border-radius:8px;font-size:14px;font-weight:700}
-  .btn.primary{background:var(--blue);color:#fff}
-  .btn.primary:hover{background:#0B87E0;text-decoration:none}
-  .btn.ghost{border:1px solid var(--line);color:var(--fg)}
+  nav{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex;align-items:center;gap:10px;height:56px}
+  .mark{display:grid;grid-template-columns:9px 9px;gap:3px}
+  .mark i{width:9px;height:9px;border-radius:50%}
+  .mark i:nth-child(1){background:var(--red)} .mark i:nth-child(2){background:var(--purple)}
+  .mark i:nth-child(3){background:var(--cyan)} .mark i:nth-child(4){background:var(--green)}
+  nav b{font-size:14px;font-weight:800;letter-spacing:.02em}
+  nav .links{margin-left:auto;display:flex;gap:18px;font-size:13.5px;align-items:center}
+  nav .links a{color:var(--fg2)} nav .links a:hover{color:var(--fg);text-decoration:none}
+  .langs{display:flex;gap:3px;margin-left:6px;padding-left:14px;border-left:1px solid var(--line)}
+  .langs button{border:none;background:none;cursor:pointer;padding:3px;border-radius:4px;opacity:.45;line-height:0}
+  .langs button:hover{opacity:.85}
+  .langs button.on{opacity:1;background:var(--bg2)}
+  .langs img{width:19px;height:14px;object-fit:cover;border-radius:2px;display:block;
+    box-shadow:0 0 0 .5px rgba(0,0,0,.15)}
+  @media(max-width:620px){ nav .links a.hide-s{display:none} }
+
+  header{padding:76px 0 60px;text-align:center;
+    background:radial-gradient(70% 120% at 50% 0%, var(--blue-l) 0%, transparent 62%)}
+  .badge{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;
+    color:var(--blue);background:var(--blue-l);padding:5px 12px;border-radius:99px;letter-spacing:.02em}
+  h1{font-size:clamp(30px,5.6vw,50px);font-weight:850;letter-spacing:-.03em;line-height:1.14;margin:18px 0 0}
+  h1 .g{background:linear-gradient(96deg,var(--red),var(--purple) 45%,var(--blue) 78%,var(--green));
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .tagline{font-size:clamp(15px,2.3vw,18px);color:var(--fg2);margin:16px auto 0;max-width:36em}
+  .cta{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:30px}
+  .btn{display:inline-flex;align-items:center;gap:7px;padding:12px 22px;border-radius:9px;
+    font-size:14px;font-weight:700;border:1px solid transparent;transition:.15s}
+  .btn.primary{background:var(--blue);color:#fff;box-shadow:0 4px 14px -4px rgba(13,153,255,.5)}
+  .btn.primary:hover{background:var(--blue-d);text-decoration:none;transform:translateY(-1px)}
+  .btn.ghost{border-color:var(--line);color:var(--fg);background:var(--bg)}
   .btn.ghost:hover{border-color:var(--muted);text-decoration:none}
+  .meta-note{font-size:12px;color:var(--muted);margin-top:12px}
 
-  section{padding:52px 0;border-bottom:1px solid var(--line)}
-  h2{font-size:21px;font-weight:800;letter-spacing:-.01em;margin-bottom:8px}
-  .sub{color:var(--muted);font-size:14px;margin-bottom:26px}
+  .shot{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--bg2);box-shadow:var(--shadow)}
+  .shot .bar{display:flex;align-items:center;gap:6px;padding:9px 12px;border-bottom:1px solid var(--line);background:var(--bg)}
+  .shot .bar s{width:9px;height:9px;border-radius:50%;background:var(--line);display:block}
+  .shot .bar span{font-size:11px;color:var(--muted);margin-left:6px;font-family:ui-monospace,monospace}
+  .shot img{width:100%}
 
-  /* steps */
-  ol.steps{list-style:none;counter-reset:s;display:grid;gap:14px}
+  section{padding:60px 0;border-top:1px solid var(--line)}
+  .eyebrow{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--blue)}
+  h2{font-size:clamp(21px,3.4vw,28px);font-weight:800;letter-spacing:-.02em;margin:8px 0 8px}
+  .sub{color:var(--fg2);font-size:14.5px;margin-bottom:28px;max-width:40em}
+  .center{text-align:center} .center .sub{margin-left:auto;margin-right:auto}
+
+  .ba{display:grid;grid-template-columns:1fr auto 1fr;gap:18px;align-items:center}
+  @media(max-width:760px){ .ba{grid-template-columns:1fr;gap:14px} .ba .arrow{transform:rotate(90deg);margin:0 auto} }
+  .ba .cap{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px;letter-spacing:.02em}
+  .arrow{color:var(--blue);font-size:26px;line-height:1}
+
+  .fig{display:grid;grid-template-columns:180px 1fr;font-size:11.5px}
+  @media(max-width:480px){ .fig{grid-template-columns:1fr} .fig .canvas{display:none} }
+  .fig .panel{border-right:1px solid var(--line);padding:8px 0;background:var(--bg);overflow:hidden}
+  .fig .panel .ttl{font-size:9.5px;font-weight:800;letter-spacing:.09em;color:var(--muted);padding:2px 12px 7px}
+  .fig .ly{display:flex;align-items:center;gap:6px;padding:3px 12px;color:var(--fg2);white-space:nowrap}
+  .fig .ly.sel{background:var(--blue-l);color:var(--blue);font-weight:700}
+  .fig .ly svg{flex:0 0 11px;opacity:.75}
+  .fig .canvas{padding:14px;background:var(--bg2);display:flex;align-items:center;justify-content:center}
+  .fig .canvas img{border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.12);max-height:270px;width:auto}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:14px}
+  .card{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:20px}
+  .card h3{font-size:15px;font-weight:750;margin:0 0 7px;display:flex;align-items:center;gap:8px}
+  .card p{font-size:13.5px;color:var(--fg2);line-height:1.6}
+  .dot{width:9px;height:9px;border-radius:50%;flex:0 0 9px}
+
+  ol.steps{list-style:none;counter-reset:s;display:grid;gap:12px}
   ol.steps li{counter-increment:s;display:flex;gap:14px;align-items:flex-start;
-    background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px 17px}
-  ol.steps li::before{content:counter(s);flex:0 0 24px;height:24px;border-radius:50%;
+    background:var(--bg2);border:1px solid var(--line);border-radius:11px;padding:16px 18px}
+  ol.steps li::before{content:counter(s);flex:0 0 25px;height:25px;border-radius:50%;
     background:var(--blue);color:#fff;font-size:12px;font-weight:800;
     display:flex;align-items:center;justify-content:center;margin-top:1px}
-  ol.steps b{display:block;font-size:15px}
-  ol.steps span{font-size:13.5px;color:var(--muted)}
-  kbd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;
-    background:var(--bg);border:1px solid var(--line);border-bottom-width:2px;
-    border-radius:5px;padding:1px 6px}
+  ol.steps b{display:block;font-size:14.5px;font-weight:700;margin-bottom:2px}
+  ol.steps span{font-size:13.5px;color:var(--fg2)}
+  kbd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
+    background:var(--bg);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 6px}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;
+    background:var(--code-bg);padding:2px 6px;border-radius:5px}
+  pre{background:var(--code-bg);border:1px solid var(--line);border-radius:9px;padding:13px 15px;
+    overflow-x:auto;font-size:12.5px;line-height:1.55;margin-top:10px}
+  pre code{background:none;padding:0;font-size:inherit}
 
-  /* features */
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px}
-  .card h3{font-size:14.5px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:8px}
-  .card p{font-size:13.5px;color:var(--muted)}
-  .dot{width:8px;height:8px;border-radius:50%;flex:0 0 8px}
+  .dl{display:flex;flex-wrap:wrap;gap:14px;align-items:center;background:var(--bg2);
+    border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:24px}
+  .dl .info b{display:block;font-size:14.5px;font-weight:750}
+  .dl .info span{font-size:12.5px;color:var(--muted)}
+  .dl .btn{margin-left:auto}
+  @media(max-width:520px){ .dl .btn{margin-left:0;width:100%;justify-content:center} }
+
+  .shots2{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;margin-top:6px}
+  .shots2 figure{margin:0}
+  .shots2 figcaption{font-size:12.5px;color:var(--muted);margin-top:9px;text-align:center}
 
   table{width:100%;border-collapse:collapse;font-size:13.5px}
-  .scroll{overflow-x:auto}
-  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
-  th{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700}
-  td:last-child,th:last-child{white-space:normal}
+  .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  th,td{text-align:left;padding:11px 13px;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:800}
+  td:last-child,th:last-child{white-space:normal;color:var(--fg2)}
+  tr.hl td{background:var(--blue-l)} tr.hl td b{color:var(--blue)}
 
-  ul.plain{list-style:none;display:grid;gap:9px;font-size:14px}
-  ul.plain li{padding-left:20px;position:relative;color:var(--muted)}
-  ul.plain li::before{content:"";position:absolute;left:4px;top:9px;width:6px;height:6px;
+  ul.plain{list-style:none;display:grid;gap:10px;font-size:14px}
+  ul.plain li{padding-left:22px;position:relative;color:var(--fg2)}
+  ul.plain li::before{content:"";position:absolute;left:5px;top:9px;width:7px;height:7px;
     border-radius:50%;background:var(--green)}
-  ul.plain li b{color:var(--fg);font-weight:600}
+  ul.plain li b{color:var(--fg);font-weight:650}
 
-  footer{padding:36px 0 56px;color:var(--muted);font-size:13px;display:flex;
-    flex-wrap:wrap;gap:8px 18px;align-items:center}
-  .langnote{font-size:12.5px;color:var(--muted);margin-top:20px}
+  footer{padding:40px 0 60px;color:var(--muted);font-size:12.5px}
+  footer .row{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center}
+  footer .tm{width:100%;margin-top:10px;font-size:11.5px;line-height:1.6}
 </style>
 </head>
 <body>
 
+<nav>
+  <div class="wrap">
+    <div class="mark"><i></i><i></i><i></i><i></i></div>
+    <b>Web to Figma</b>
+    <div class="links">
+      <a href="#how" class="hide-s" data-t="nav_how">사용법</a>
+      <a href="#features" class="hide-s" data-t="nav_feat">기능</a>
+      <a href="#install" data-t="nav_install">설치</a>
+      <a href="https://github.com/bogeun35/web-to-figma">GitHub</a>
+      <span class="langs">
+        <button data-lang="ko" title="한국어"><img src="flags/kr.svg" alt="한국어"></button>
+        <button data-lang="en" title="English"><img src="flags/us.svg" alt="English"></button>
+        <button data-lang="zh" title="中文"><img src="flags/cn.svg" alt="中文"></button>
+        <button data-lang="ja" title="日本語"><img src="flags/jp.svg" alt="日本語"></button>
+      </span>
+    </div>
+  </div>
+</nav>
+
 <header>
   <div class="wrap">
-    <div class="logo"><i></i><i></i><i></i><i></i></div>
-    <h1>Web to Figma</h1>
-    <p class="tagline">웹페이지를 <b>편집 가능한 피그마 레이어</b>로 복사하는 크롬 확장 프로그램.
-      스크린샷 이미지가 아니라, 텍스트는 텍스트로 아이콘은 벡터로 들어갑니다.</p>
+    <span class="badge" data-t="badge">Chrome Extension · v2.0</span>
+    <h1 data-t="h1"></h1>
+    <p class="tagline" data-t="tagline"></p>
     <div class="cta">
-      <a class="btn primary" href="https://github.com/bogeun35/web-to-figma">GitHub 저장소</a>
-      <a class="btn ghost" href="https://github.com/bogeun35/web-to-figma#설치">설치 방법</a>
+      <a class="btn primary" href="#install" data-t="cta_dl"></a>
+      <a class="btn ghost" href="https://github.com/bogeun35/web-to-figma" data-t="cta_gh"></a>
     </div>
+    <p class="meta-note" data-t="free"></p>
   </div>
 </header>
 
 <section>
   <div class="wrap">
-    <h2>사용법</h2>
-    <p class="sub">플러그인 설치도, 파일 내보내기도 필요 없습니다. 복사 → 붙여넣기가 전부입니다.</p>
-    <ol class="steps">
-      <li><div><b>확장 아이콘 클릭</b><span>캡처할 웹페이지에서 툴바의 아이콘을 누릅니다.</span></div></li>
-      <li><div><b>범위와 해상도 선택</b><span>페이지 전체 또는 특정 영역(클릭으로 지정). 해상도는 현재 브라우저 그대로 또는 390~3440px 프리셋.</span></div></li>
-      <li><div><b>클립보드로 복사</b><span>버튼 하나로 변환이 끝납니다.</span></div></li>
-      <li><div><b>피그마에서 <kbd>Ctrl</kbd> + <kbd>V</kbd></b><span>레이어 구조가 그대로 붙습니다. 바로 편집할 수 있습니다.</span></div></li>
-    </ol>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <h2>무엇이 그대로 들어오나</h2>
-    <p class="sub">붙여넣는 즉시 렌더됩니다. 별도 후처리가 필요하지 않습니다.</p>
-    <div class="grid">
-      <div class="card">
-        <h3><span class="dot" style="background:var(--red)"></span>텍스트</h3>
-        <p>글자·색상·크기·굵기·자간·줄바꿈까지. 이미지가 아닌 실제 텍스트 레이어입니다.</p>
+    <div class="center">
+      <div class="eyebrow">Result</div>
+      <h2 data-t="res_h"></h2>
+      <p class="sub" data-t="res_s"></p>
+    </div>
+    <div class="ba">
+      <div>
+        <div class="cap" data-t="ba_web"></div>
+        <div class="shot">
+          <div class="bar"><s></s><s></s><s></s><span>google.com/search</span></div>
+          <img src="img/real-web.png" alt="Google search results page" width="620" height="460">
+        </div>
       </div>
-      <div class="card">
-        <h3><span class="dot" style="background:var(--purple)"></span>벡터 아이콘</h3>
-        <p>SVG 아이콘은 진짜 벡터 패스로. 구멍 뚫린 도형(돋보기 등)도 정확하게 재현됩니다.</p>
-      </div>
-      <div class="card">
-        <h3><span class="dot" style="background:var(--cyan)"></span>레이아웃 · 스타일</h3>
-        <p>DOM 계층 구조를 유지한 프레임 트리. 배경색·테두리·모서리 라운드·절대 좌표 그대로.</p>
-      </div>
-      <div class="card">
-        <h3><span class="dot" style="background:var(--green)"></span>해상도 프리셋</h3>
-        <p>390 / 768 / 1440 / 1920 / 2560 / 3440px. 지정한 너비로 페이지를 재배치해 최하단까지 캡처합니다.</p>
+      <div class="arrow">→</div>
+      <div>
+        <div class="cap" data-t="ba_fig"></div>
+        <div class="shot">
+          <div class="bar"><s></s><s></s><s></s><span>Figma — Layers</span></div>
+          <div class="fig">
+            <div class="panel">
+              <div class="ttl">Layers</div>
+              <div class="ly sel"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="1.5" width="9" height="9" rx="1"/></svg>body#gsr @620</div>
+              <div class="ly" style="padding-left:24px"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="1.5" width="9" height="9" rx="1"/></svg>div#searchform</div>
+              <div class="ly" style="padding-left:36px"><svg viewBox="0 0 12 12" fill="currentColor"><path d="M2 2h8v1.4H6.8V10H5.2V3.4H2z"/></svg>figma plugin</div>
+              <div class="ly" style="padding-left:36px"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2 9.5 5 3l2 4 1.2-1.8L10 9.5z"/></svg>vector</div>
+              <div class="ly" style="padding-left:24px"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="1.5" width="9" height="9" rx="1"/></svg>div#appbar</div>
+              <div class="ly" style="padding-left:36px"><svg viewBox="0 0 12 12" fill="currentColor"><path d="M2 2h8v1.4H6.8V10H5.2V3.4H2z"/></svg>All</div>
+              <div class="ly" style="padding-left:24px"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="1.5" width="9" height="9" rx="1"/></svg>div#center_col</div>
+              <div class="ly" style="padding-left:36px"><svg viewBox="0 0 12 12" fill="currentColor"><path d="M2 2h8v1.4H6.8V10H5.2V3.4H2z"/></svg>Design Plugins &amp; Ext…</div>
+              <div class="ly" style="padding-left:36px"><svg viewBox="0 0 12 12" fill="currentColor"><path d="M2 2h8v1.4H6.8V10H5.2V3.4H2z"/></svg>Introduction | Develo…</div>
+              <div class="ly" style="padding-left:24px"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="1.5" width="9" height="9" rx="1"/></svg>div#sfooter</div>
+            </div>
+            <div class="canvas"><img src="img/real-web.png" alt="Converted result on the Figma canvas"></div>
+          </div>
+        </div>
       </div>
     </div>
-    <p class="langnote">한국어 · English · 中文 · 日本語 지원</p>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:14px;text-align:center" data-t="ba_note"></p>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="eyebrow">How it works</div>
+    <h2 data-t="how_h"></h2>
+    <p class="sub" data-t="how_s"></p>
+    <ol class="steps">
+      <li><div><b data-t="s1b"></b><span data-t="s1s"></span></div></li>
+      <li><div><b data-t="s2b"></b><span data-t="s2s"></span></div></li>
+      <li><div><b data-t="s3b"></b><span data-t="s3s"></span></div></li>
+      <li><div><b><span data-t="s4b"></span> <kbd>Ctrl</kbd> + <kbd>V</kbd></b><span data-t="s4s"></span></div></li>
+    </ol>
+    <div class="shots2" style="margin-top:26px">
+      <figure>
+        <div class="shot"><img src="img/popup.png" alt="Extension popup" width="300" height="300"></div>
+        <figcaption data-t="f1"></figcaption>
+      </figure>
+      <figure>
+        <div class="shot"><img src="img/real-picker.png" alt="Element picker" width="620" height="460"></div>
+        <figcaption data-t="f2"></figcaption>
+      </figure>
+      <figure>
+        <div class="shot"><img src="img/popup-picked.png" alt="Copied" width="300" height="352"></div>
+        <figcaption data-t="f3"></figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <div class="eyebrow">Features</div>
+    <h2 data-t="feat_h"></h2>
+    <p class="sub" data-t="feat_s"></p>
+    <div class="grid">
+      <div class="card"><h3><span class="dot" style="background:var(--red)"></span><span data-t="c1h"></span></h3><p data-t="c1p"></p></div>
+      <div class="card"><h3><span class="dot" style="background:var(--purple)"></span><span data-t="c2h"></span></h3><p data-t="c2p"></p></div>
+      <div class="card"><h3><span class="dot" style="background:var(--cyan)"></span><span data-t="c3h"></span></h3><p data-t="c3p"></p></div>
+      <div class="card"><h3><span class="dot" style="background:var(--green)"></span><span data-t="c4h"></span></h3><p data-t="c4p"></p></div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <div class="eyebrow">Install</div>
+    <h2 data-t="ins_h"></h2>
+    <p class="sub" data-t="ins_s"></p>
+    <div class="dl">
+      <div class="info">
+        <b>web-to-figma-v2.0.zip</b>
+        <span data-t="dl_meta"></span>
+      </div>
+      <a class="btn primary" href="web-to-figma-v2.0.zip" download data-t="dl_btn"></a>
+    </div>
+    <ol class="steps">
+      <li><div><b data-t="i1b"></b><span data-t="i1s"></span></div></li>
+      <li><div><b data-t="i2b"></b><span data-t="i2s"></span></div></li>
+      <li><div><b data-t="i3b"></b><span data-t="i3s"></span></div></li>
+      <li><div><b data-t="i4b"></b><span data-t="i4s"></span></div></li>
+      <li><div><b data-t="i5b"></b><span data-t="i5s"></span></div></li>
+    </ol>
+    <p class="sub" style="margin:22px 0 0" data-t="git_h"></p>
+    <pre><code>git clone https://github.com/bogeun35/web-to-figma.git</code></pre>
+    <p style="font-size:13px;color:var(--muted);margin-top:8px" data-t="git_s"></p>
   </div>
 </section>
 
 <section>
   <div class="wrap">
-    <h2>다른 방법과 비교</h2>
-    <p class="sub">기존 방식들이 놓치는 지점.</p>
+    <div class="eyebrow">Comparison</div>
+    <h2 data-t="cmp_h"></h2>
+    <p class="sub" data-t="cmp_s"></p>
     <div class="scroll">
       <table>
-        <thead>
-          <tr><th>방식</th><th>결과물</th><th>한계</th></tr>
-        </thead>
+        <thead><tr><th data-t="th1"></th><th data-t="th2"></th><th data-t="th3"></th></tr></thead>
         <tbody>
-          <tr><td>스크린샷 붙여넣기</td><td>이미지 1장</td><td>텍스트·색상 수정 불가</td></tr>
-          <tr><td>HTML → 피그마 플러그인</td><td>레이어</td><td>플러그인 설치·파일 준비 필요, 간격이 깨지기 쉬움</td></tr>
-          <tr><td><b>Web to Figma</b></td><td>레이어</td><td>클릭 한 번, 절대 좌표라 간격이 어긋나지 않음</td></tr>
+          <tr><td data-t="r1a"></td><td data-t="r1b"></td><td data-t="r1c"></td></tr>
+          <tr><td data-t="r2a"></td><td data-t="r2b"></td><td data-t="r2c"></td></tr>
+          <tr class="hl"><td><b>Web to Figma</b></td><td><b data-t="r3b"></b></td><td data-t="r3c"></td></tr>
         </tbody>
       </table>
     </div>
@@ -157,28 +310,227 @@
 
 <section>
   <div class="wrap">
-    <h2>알아두면 좋은 점</h2>
-    <ul class="plain">
-      <li><b>이미지</b>는 평균 색상 플레이스홀더로 들어옵니다. 클립보드 형식 자체가 이미지 원본 데이터를 담지 못하기 때문입니다.</li>
-      <li><b>그라디언트·그림자</b>는 아직 지원하지 않습니다.</li>
-      <li>페이지가 매우 크면 노드 수가 많아 변환에 몇 초 걸릴 수 있습니다. 영역 선택을 쓰면 빠릅니다.</li>
-      <li>캡처한 데이터는 <b>브라우저 안에서만</b> 처리되며 어디로도 전송되지 않습니다.</li>
+    <div class="eyebrow">Good to know</div>
+    <h2 data-t="gtk_h"></h2>
+    <ul class="plain" style="margin-top:20px">
+      <li data-t="g1"></li><li data-t="g2"></li><li data-t="g3"></li><li data-t="g4"></li>
     </ul>
   </div>
 </section>
 
 <footer>
-  <div class="wrap" style="display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center">
-    <span>© 2026 bogeun35</span>
-    <a href="https://github.com/bogeun35/web-to-figma">GitHub</a>
-    <a href="https://github.com/bogeun35/web-to-figma/blob/main/PRIVACY.md">개인정보처리방침</a>
-    <span style="color:var(--muted)">Figma는 Figma, Inc.의 상표입니다. 본 프로젝트는 Figma와 무관합니다.</span>
+  <div class="wrap">
+    <div class="row">
+      <span>© 2026 bogeun35</span>
+      <a href="https://github.com/bogeun35/web-to-figma">GitHub</a>
+      <a href="https://github.com/bogeun35/web-to-figma/blob/main/PRIVACY.md" data-t="privacy"></a>
+      <a href="https://github.com/bogeun35/web-to-figma/issues" data-t="contact"></a>
+    </div>
+    <div class="tm" data-t="tm"></div>
   </div>
 </footer>
 
 <script>
-  // 사용자 테마 토글 지원(호스트가 data-theme를 심는 경우 대응)
-  (function(){ try{ var t=localStorage.getItem('theme'); if(t) document.documentElement.setAttribute('data-theme',t); }catch(e){} })();
+const I18N = {
+  ko: {
+    lang:"ko", nav_how:"사용법", nav_feat:"기능", nav_install:"설치",
+    badge:"Chrome Extension · v2.0",
+    h1:'웹페이지를<br><span class="g">편집 가능한 피그마 레이어</span>로', html_h1:true,
+    tagline:"스크린샷 이미지가 아닙니다. 텍스트는 텍스트 레이어로, 아이콘은 벡터 패스로. 복사해서 피그마에 붙여넣으면 그대로 편집할 수 있습니다.",
+    cta_dl:"↓ 설치 파일 받기", cta_gh:"GitHub 저장소",
+    free:"무료 · 오픈소스 · 한국어 / English / 中文 / 日本語",
+    res_h:"붙여넣는 즉시, 레이어로",
+    res_s:"아래는 실제 변환 결과입니다. DOM 계층이 프레임 트리로, 글자가 텍스트 레이어로 들어옵니다.",
+    ba_web:"웹페이지 — 구글 검색 결과", ba_fig:"피그마 — 1,557개 레이어",
+    ba_note:"실제 구글 검색 결과 페이지를 변환한 결과입니다. 1,230개 DOM 노드가 1,557개 피그마 레이어로 들어옵니다.",
+    how_h:"클릭 두 번이면 끝", how_s:"플러그인 설치도, 파일 내보내기도 필요 없습니다.",
+    s1b:"확장 아이콘 클릭", s1s:"캡처할 웹페이지에서 툴바 아이콘을 누릅니다.",
+    s2b:"범위와 해상도 선택", s2s:"페이지 전체 또는 원하는 영역만. 해상도는 현재 브라우저 그대로 또는 390~3440px 프리셋.",
+    s3b:"클립보드로 복사", s3s:"버튼 하나로 변환이 끝납니다.",
+    s4b:"피그마에서", s4s:"레이어 구조가 그대로 붙습니다.",
+    f1:"범위와 해상도를 고르고 복사", f2:"영역 선택 — 클릭으로 지정", f3:"선택한 영역만 변환",
+    feat_h:"무엇이 그대로 들어오나", feat_s:"붙여넣는 즉시 렌더됩니다. 후처리가 필요하지 않습니다.",
+    c1h:"텍스트", c1p:"글자·색상·크기·굵기·자간·줄바꿈까지. 이미지가 아닌 실제 텍스트 레이어라 바로 수정됩니다.",
+    c2h:"벡터 아이콘", c2p:"SVG 아이콘을 진짜 벡터 패스로 변환합니다. 돋보기처럼 구멍 뚫린 도형도 정확히 재현됩니다.",
+    c3h:"레이아웃 · 스타일", c3p:"DOM 계층을 유지한 프레임 트리. 배경색·테두리·모서리 라운드에 절대 좌표라 간격이 어긋나지 않습니다.",
+    c4h:"해상도 프리셋", c4p:"390 / 768 / 1440 / 1920 / 2560 / 3440px. 지정한 너비로 페이지를 재배치해 최하단까지 담습니다.",
+    ins_h:"설치 방법", ins_s:"크롬 웹스토어 게시 전이라 개발자 모드로 설치합니다. 1분이면 됩니다.",
+    dl_meta:"Chrome · Edge 등 크로미움 브라우저 · 약 6.4MB", dl_btn:"↓ 다운로드",
+    i1b:"zip 파일 압축 해제", i1s:"내려받은 파일을 원하는 폴더에 풀어둡니다. 이 폴더를 삭제하면 확장도 사라지니 그대로 두세요.",
+    i2b:"확장 관리 페이지 열기", i2s:"주소창에 chrome://extensions 를 입력합니다.",
+    i3b:"개발자 모드 켜기", i3s:"페이지 우측 상단의 개발자 모드 토글을 켭니다.",
+    i4b:"압축해제된 확장 프로그램을 로드", i4s:"좌측 상단 버튼을 누르고, 압축을 푼 폴더를 선택합니다.",
+    i5b:"툴바에 고정", i5s:"주소창 옆 퍼즐 아이콘에서 Web to Figma를 핀으로 고정하면 편합니다.",
+    git_h:"git으로 받아 쓰려면:", git_s:"압축해제된 확장 프로그램을 로드할 때 저장소의 extension 폴더를 선택하세요.",
+    cmp_h:"다른 방법과 비교", cmp_s:"기존 방식들이 놓치는 지점.",
+    th1:"방식", th2:"결과물", th3:"한계",
+    r1a:"스크린샷 붙여넣기", r1b:"이미지 1장", r1c:"텍스트·색상 수정 불가",
+    r2a:"HTML → 피그마 플러그인", r2b:"레이어", r2c:"플러그인 설치와 파일 준비 필요, 간격이 깨지기 쉬움",
+    r3b:"레이어", r3c:"클릭 두 번, 절대 좌표라 간격이 어긋나지 않음",
+    gtk_h:"알아두면 좋은 점",
+    g1:"<b>이미지</b>는 평균 색상 플레이스홀더로 들어옵니다. 피그마 클립보드 형식이 이미지 원본 데이터를 담지 못하고 해시 참조만 쓰기 때문입니다.",
+    g2:"<b>그라디언트와 그림자</b>는 아직 지원하지 않습니다.",
+    g3:"노드가 많은 페이지는 변환에 몇 초 걸릴 수 있습니다. <b>영역 선택</b>을 쓰면 빨라집니다.",
+    g4:"캡처한 데이터는 <b>브라우저 안에서만</b> 처리되며 어디로도 전송되지 않습니다.",
+    privacy:"개인정보처리방침", contact:"문의",
+    tm:"Figma는 Figma, Inc.의 상표입니다. 본 프로젝트는 Figma, Inc.와 관련이 없으며 공식 제품이 아닙니다."
+  },
+  en: {
+    lang:"en", nav_how:"How", nav_feat:"Features", nav_install:"Install",
+    badge:"Chrome Extension · v2.0",
+    h1:'Any webpage into<br><span class="g">editable Figma layers</span>', html_h1:true,
+    tagline:"Not a screenshot. Text stays text, icons stay vectors. Copy, paste into Figma, and start editing right away.",
+    cta_dl:"↓ Download", cta_gh:"View on GitHub",
+    free:"Free · Open source · 한국어 / English / 中文 / 日本語",
+    res_h:"Layers the moment you paste",
+    res_s:"A real conversion below. The DOM tree becomes a frame tree, and text becomes text layers.",
+    ba_web:"Webpage — Google search results", ba_fig:"Figma — 1,557 layers",
+    ba_note:"An actual Google search results page. 1,230 DOM nodes became 1,557 Figma layers.",
+    how_h:"Two clicks, that's it", how_s:"No plugin to install, no file to export.",
+    s1b:"Click the extension icon", s1s:"Open it on the page you want to capture.",
+    s2b:"Pick area and resolution", s2s:"Whole page or a single element. Current browser width, or a 390–3440px preset.",
+    s3b:"Copy to clipboard", s3s:"One button does the conversion.",
+    s4b:"In Figma, press", s4s:"The layer structure lands intact.",
+    f1:"Choose area and resolution, then copy", f2:"Element picker — click to select", f3:"Only the selected area",
+    feat_h:"What comes through", feat_s:"Rendered the moment you paste. No cleanup needed.",
+    c1h:"Text", c1p:"Characters, color, size, weight, letter spacing and line breaks. Real text layers, editable immediately.",
+    c2h:"Vector icons", c2p:"SVG icons become real vector paths — even shapes with holes, like a magnifier, come out right.",
+    c3h:"Layout & style", c3p:"A frame tree that mirrors the DOM. Background, border, corner radius, and absolute coordinates so spacing never drifts.",
+    c4h:"Resolution presets", c4p:"390 / 768 / 1440 / 1920 / 2560 / 3440px. The page reflows to that width and is captured to the very bottom.",
+    ins_h:"How to install", ins_s:"Not on the Chrome Web Store yet, so load it in developer mode. Takes about a minute.",
+    dl_meta:"Chromium browsers (Chrome, Edge) · ~6.4MB", dl_btn:"↓ Download",
+    i1b:"Unzip the file", i1s:"Extract it to a folder you'll keep — deleting the folder removes the extension.",
+    i2b:"Open the extensions page", i2s:"Type chrome://extensions in the address bar.",
+    i3b:"Turn on Developer mode", i3s:"Use the toggle at the top right of the page.",
+    i4b:"Load unpacked", i4s:"Click the button at the top left and select the unzipped folder.",
+    i5b:"Pin it to the toolbar", i5s:"Open the puzzle icon next to the address bar and pin Web to Figma.",
+    git_h:"Prefer git?", git_s:"When loading unpacked, select the extension folder inside the repository.",
+    cmp_h:"Compared to other ways", cmp_s:"Where the usual approaches fall short.",
+    th1:"Method", th2:"Output", th3:"Limitation",
+    r1a:"Paste a screenshot", r1b:"One image", r1c:"Text and colors can't be edited",
+    r2a:"HTML → Figma plugin", r2b:"Layers", r2c:"Needs a plugin and an exported file; spacing breaks easily",
+    r3b:"Layers", r3c:"Two clicks, and absolute coordinates keep spacing exact",
+    gtk_h:"Good to know",
+    g1:"<b>Images</b> come in as average-color placeholders — the Figma clipboard format carries only hash references, not the pixels.",
+    g2:"<b>Gradients and shadows</b> aren't supported yet.",
+    g3:"Pages with many nodes can take a few seconds. Use <b>element picker</b> to speed it up.",
+    g4:"Captured data is processed <b>entirely in your browser</b> and is never sent anywhere.",
+    privacy:"Privacy Policy", contact:"Contact",
+    tm:"Figma is a trademark of Figma, Inc. This project is not affiliated with Figma, Inc. and is not an official product."
+  },
+  zh: {
+    lang:"zh", nav_how:"用法", nav_feat:"功能", nav_install:"安装",
+    badge:"Chrome 扩展 · v2.0",
+    h1:'把网页变成<br><span class="g">可编辑的 Figma 图层</span>', html_h1:true,
+    tagline:"不是截图。文字仍是文字，图标仍是矢量。复制后粘贴到 Figma，马上就能编辑。",
+    cta_dl:"↓ 下载安装包", cta_gh:"GitHub 仓库",
+    free:"免费 · 开源 · 한국어 / English / 中文 / 日本語",
+    res_h:"粘贴即成图层",
+    res_s:"下面是真实的转换结果。DOM 层级变成框架树，文字变成文本图层。",
+    ba_web:"网页 — 谷歌搜索结果", ba_fig:"Figma — 1,557 个图层",
+    ba_note:"真实的谷歌搜索结果页面。1,230 个 DOM 节点转换为 1,557 个 Figma 图层。",
+    how_h:"两次点击即可", how_s:"无需安装插件，也无需导出文件。",
+    s1b:"点击扩展图标", s1s:"在要捕获的网页上打开它。",
+    s2b:"选择范围和分辨率", s2s:"整页或指定区域。可用当前浏览器宽度，或 390–3440px 预设。",
+    s3b:"复制到剪贴板", s3s:"一个按钮完成转换。",
+    s4b:"在 Figma 中按", s4s:"图层结构完整保留。",
+    f1:"选择范围和分辨率后复制", f2:"区域选择 — 点击指定", f3:"仅转换所选区域",
+    feat_h:"哪些内容会保留", feat_s:"粘贴后立即渲染，无需后续处理。",
+    c1h:"文字", c1p:"文字、颜色、字号、字重、字间距和换行。是真正的文本图层，可直接修改。",
+    c2h:"矢量图标", c2p:"SVG 图标转换为真正的矢量路径。像放大镜那样带镂空的形状也能准确还原。",
+    c3h:"布局与样式", c3p:"保持 DOM 层级的框架树。背景色、描边、圆角，并采用绝对坐标，间距不会错位。",
+    c4h:"分辨率预设", c4p:"390 / 768 / 1440 / 1920 / 2560 / 3440px。按指定宽度重排页面，一直捕获到底部。",
+    ins_h:"安装方法", ins_s:"尚未在 Chrome 应用店上架，请用开发者模式加载。大约一分钟。",
+    dl_meta:"Chromium 浏览器（Chrome、Edge）· 约 6.4MB", dl_btn:"↓ 下载",
+    i1b:"解压 zip 文件", i1s:"解压到一个会保留的文件夹。删除该文件夹扩展也会消失。",
+    i2b:"打开扩展管理页面", i2s:"在地址栏输入 chrome://extensions。",
+    i3b:"开启开发者模式", i3s:"打开页面右上角的开发者模式开关。",
+    i4b:"加载已解压的扩展程序", i4s:"点击左上角按钮，选择解压后的文件夹。",
+    i5b:"固定到工具栏", i5s:"点击地址栏旁的拼图图标，把 Web to Figma 固定。",
+    git_h:"想用 git：", git_s:"加载已解压的扩展程序时，请选择仓库中的 extension 文件夹。",
+    cmp_h:"与其他方式比较", cmp_s:"现有方式的不足之处。",
+    th1:"方式", th2:"结果", th3:"局限",
+    r1a:"粘贴截图", r1b:"一张图片", r1c:"无法修改文字和颜色",
+    r2a:"HTML → Figma 插件", r2b:"图层", r2c:"需要安装插件并准备文件，间距容易错乱",
+    r3b:"图层", r3c:"两次点击，绝对坐标保证间距准确",
+    gtk_h:"需要了解",
+    g1:"<b>图片</b>会以平均色占位块的形式导入。Figma 剪贴板格式只携带哈希引用，不包含像素数据。",
+    g2:"<b>渐变和阴影</b>暂不支持。",
+    g3:"节点较多的页面转换可能需要几秒。使用<b>区域选择</b>会更快。",
+    g4:"捕获的数据<b>仅在浏览器内</b>处理，不会发送到任何地方。",
+    privacy:"隐私政策", contact:"联系",
+    tm:"Figma 是 Figma, Inc. 的商标。本项目与 Figma, Inc. 无关，并非官方产品。"
+  },
+  ja: {
+    lang:"ja", nav_how:"使い方", nav_feat:"機能", nav_install:"インストール",
+    badge:"Chrome 拡張 · v2.0",
+    h1:'ウェブページを<br><span class="g">編集できる Figma レイヤー</span>に', html_h1:true,
+    tagline:"スクリーンショットではありません。テキストはテキスト、アイコンはベクターのまま。コピーして Figma に貼り付ければすぐ編集できます。",
+    cta_dl:"↓ ダウンロード", cta_gh:"GitHub リポジトリ",
+    free:"無料 · オープンソース · 한국어 / English / 中文 / 日本語",
+    res_h:"貼り付けた瞬間、レイヤーに",
+    res_s:"以下は実際の変換結果です。DOM 階層がフレームツリーに、文字がテキストレイヤーになります。",
+    ba_web:"ウェブページ — Google 検索結果", ba_fig:"Figma — 1,557 レイヤー",
+    ba_note:"実際の Google 検索結果ページです。1,230 個の DOM ノードが 1,557 個の Figma レイヤーになりました。",
+    how_h:"クリック2回で完了", how_s:"プラグインのインストールもファイルの書き出しも不要です。",
+    s1b:"拡張アイコンをクリック", s1s:"取り込みたいページで開きます。",
+    s2b:"範囲と解像度を選択", s2s:"ページ全体でも特定の要素でも。現在のブラウザ幅、または 390〜3440px のプリセット。",
+    s3b:"クリップボードにコピー", s3s:"ボタン1つで変換が終わります。",
+    s4b:"Figma で", s4s:"レイヤー構造がそのまま入ります。",
+    f1:"範囲と解像度を選んでコピー", f2:"要素を選択 — クリックで指定", f3:"選択した範囲だけ変換",
+    feat_h:"そのまま入るもの", feat_s:"貼り付けた瞬間に描画されます。後処理は不要です。",
+    c1h:"テキスト", c1p:"文字・色・サイズ・太さ・字間・改行まで。画像ではなく本物のテキストレイヤーなのですぐ編集できます。",
+    c2h:"ベクターアイコン", c2p:"SVG アイコンを本物のベクターパスに変換します。虫眼鏡のような穴のある図形も正確に再現します。",
+    c3h:"レイアウトとスタイル", c3p:"DOM 階層を保ったフレームツリー。背景色・線・角丸に加え絶対座標なので余白がずれません。",
+    c4h:"解像度プリセット", c4p:"390 / 768 / 1440 / 1920 / 2560 / 3440px。指定した幅でページを再配置し、最下部まで取り込みます。",
+    ins_h:"インストール方法", ins_s:"Chrome ウェブストア公開前のため、デベロッパーモードで読み込みます。1分ほどです。",
+    dl_meta:"Chromium 系ブラウザ（Chrome・Edge）· 約 6.4MB", dl_btn:"↓ ダウンロード",
+    i1b:"zip を解凍", i1s:"残しておくフォルダに解凍してください。削除すると拡張機能も消えます。",
+    i2b:"拡張機能ページを開く", i2s:"アドレスバーに chrome://extensions と入力します。",
+    i3b:"デベロッパーモードをオン", i3s:"ページ右上のトグルをオンにします。",
+    i4b:"パッケージ化されていない拡張機能を読み込む", i4s:"左上のボタンを押し、解凍したフォルダを選びます。",
+    i5b:"ツールバーに固定", i5s:"アドレスバー横のパズルアイコンから Web to Figma を固定すると便利です。",
+    git_h:"git を使う場合:", git_s:"読み込むときはリポジトリ内の extension フォルダを選択してください。",
+    cmp_h:"他の方法との比較", cmp_s:"既存の方法が取りこぼす点。",
+    th1:"方法", th2:"結果", th3:"制限",
+    r1a:"スクリーンショットを貼る", r1b:"画像1枚", r1c:"文字も色も編集できない",
+    r2a:"HTML → Figma プラグイン", r2b:"レイヤー", r2c:"プラグインとファイルの準備が必要で、余白が崩れやすい",
+    r3b:"レイヤー", r3c:"クリック2回。絶対座標なので余白がずれない",
+    gtk_h:"知っておくと良いこと",
+    g1:"<b>画像</b>は平均色のプレースホルダーとして入ります。Figma のクリップボード形式はハッシュ参照のみを持ち、画素データを含まないためです。",
+    g2:"<b>グラデーションと影</b>はまだ対応していません。",
+    g3:"ノードの多いページは変換に数秒かかることがあります。<b>要素を選択</b>を使うと速くなります。",
+    g4:"取り込んだデータは<b>ブラウザ内でのみ</b>処理され、どこにも送信されません。",
+    privacy:"プライバシーポリシー", contact:"お問い合わせ",
+    tm:"Figma は Figma, Inc. の商標です。本プロジェクトは Figma, Inc. とは関係なく、公式製品ではありません。"
+  }
+};
+
+function apply(lang){
+  var d = I18N[lang] || I18N.ko;
+  document.documentElement.lang = d.lang;
+  document.querySelectorAll("[data-t]").forEach(function(el){
+    var k = el.getAttribute("data-t");
+    var v = d[k];
+    if (v == null) return;
+    if (/<[a-z]/i.test(v)) el.innerHTML = v; else el.textContent = v;
+  });
+  document.querySelectorAll(".langs button").forEach(function(b){
+    b.classList.toggle("on", b.getAttribute("data-lang") === lang);
+  });
+  try { localStorage.setItem("w2f_lang", lang); } catch(e){}
+}
+document.querySelectorAll(".langs button").forEach(function(b){
+  b.addEventListener("click", function(){ apply(b.getAttribute("data-lang")); });
+});
+(function(){
+  try{ var t=localStorage.getItem('theme'); if(t) document.documentElement.setAttribute('data-theme',t); }catch(e){}
+  var saved = null;
+  try { saved = localStorage.getItem("w2f_lang"); } catch(e){}
+  var nav = (navigator.language || "en").toLowerCase();
+  var auto = nav.indexOf("ko")===0 ? "ko" : nav.indexOf("zh")===0 ? "zh" : nav.indexOf("ja")===0 ? "ja" : "en";
+  apply(saved && I18N[saved] ? saved : auto);
+})();
 </script>
 </body>
 </html>
