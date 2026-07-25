@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Web to Figma — 웹페이지를 피그마 레이어로</title>
+<meta name="description" content="크롬 확장 프로그램. 웹페이지를 캡처해 편집 가능한 피그마 레이어로 클립보드에 복사합니다. 텍스트·벡터 아이콘·색상까지 그대로.">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#ffffff; --fg:#1e1e1e; --muted:#8c8c8c; --line:#ececec; --card:#fafafa;
+    --blue:#0D99FF; --red:#F24E1E; --purple:#A259FF; --cyan:#1ABCFE; --green:#0ACF83;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#1e1e1e; --fg:#f5f5f5; --muted:#9a9a9a; --line:#2f2f2f; --card:#262626; }
+  }
+  :root[data-theme="dark"]{ --bg:#1e1e1e; --fg:#f5f5f5; --muted:#9a9a9a; --line:#2f2f2f; --card:#262626; }
+  :root[data-theme="light"]{ --bg:#ffffff; --fg:#1e1e1e; --muted:#8c8c8c; --line:#ececec; --card:#fafafa; }
+
+  body{background:var(--bg);color:var(--fg);
+    font-family:Inter,-apple-system,'Segoe UI','Noto Sans KR','Malgun Gothic',sans-serif;
+    line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:860px;margin:0 auto;padding:0 24px}
+  a{color:var(--blue);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  /* hero */
+  header{padding:72px 0 56px;border-bottom:1px solid var(--line)}
+  .logo{display:grid;grid-template-columns:16px 16px;gap:5px;margin-bottom:22px}
+  .logo i{width:16px;height:16px;border-radius:50%;display:block}
+  .logo i:nth-child(1){background:var(--red)}
+  .logo i:nth-child(2){background:var(--purple)}
+  .logo i:nth-child(3){background:var(--cyan)}
+  .logo i:nth-child(4){background:var(--green)}
+  h1{font-size:clamp(30px,5.4vw,46px);font-weight:800;letter-spacing:-.02em;line-height:1.2}
+  .tagline{font-size:clamp(15px,2.4vw,19px);color:var(--muted);margin-top:14px;max-width:44em}
+  .cta{display:flex;flex-wrap:wrap;gap:10px;margin-top:30px}
+  .btn{display:inline-block;padding:11px 20px;border-radius:8px;font-size:14px;font-weight:700}
+  .btn.primary{background:var(--blue);color:#fff}
+  .btn.primary:hover{background:#0B87E0;text-decoration:none}
+  .btn.ghost{border:1px solid var(--line);color:var(--fg)}
+  .btn.ghost:hover{border-color:var(--muted);text-decoration:none}
+
+  section{padding:52px 0;border-bottom:1px solid var(--line)}
+  h2{font-size:21px;font-weight:800;letter-spacing:-.01em;margin-bottom:8px}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:26px}
+
+  /* steps */
+  ol.steps{list-style:none;counter-reset:s;display:grid;gap:14px}
+  ol.steps li{counter-increment:s;display:flex;gap:14px;align-items:flex-start;
+    background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px 17px}
+  ol.steps li::before{content:counter(s);flex:0 0 24px;height:24px;border-radius:50%;
+    background:var(--blue);color:#fff;font-size:12px;font-weight:800;
+    display:flex;align-items:center;justify-content:center;margin-top:1px}
+  ol.steps b{display:block;font-size:15px}
+  ol.steps span{font-size:13.5px;color:var(--muted)}
+  kbd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;
+    background:var(--bg);border:1px solid var(--line);border-bottom-width:2px;
+    border-radius:5px;padding:1px 6px}
+
+  /* features */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px}
+  .card h3{font-size:14.5px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+  .card p{font-size:13.5px;color:var(--muted)}
+  .dot{width:8px;height:8px;border-radius:50%;flex:0 0 8px}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  .scroll{overflow-x:auto}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700}
+  td:last-child,th:last-child{white-space:normal}
+
+  ul.plain{list-style:none;display:grid;gap:9px;font-size:14px}
+  ul.plain li{padding-left:20px;position:relative;color:var(--muted)}
+  ul.plain li::before{content:"";position:absolute;left:4px;top:9px;width:6px;height:6px;
+    border-radius:50%;background:var(--green)}
+  ul.plain li b{color:var(--fg);font-weight:600}
+
+  footer{padding:36px 0 56px;color:var(--muted);font-size:13px;display:flex;
+    flex-wrap:wrap;gap:8px 18px;align-items:center}
+  .langnote{font-size:12.5px;color:var(--muted);margin-top:20px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="logo"><i></i><i></i><i></i><i></i></div>
+    <h1>Web to Figma</h1>
+    <p class="tagline">웹페이지를 <b>편집 가능한 피그마 레이어</b>로 복사하는 크롬 확장 프로그램.
+      스크린샷 이미지가 아니라, 텍스트는 텍스트로 아이콘은 벡터로 들어갑니다.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/bogeun35/web-to-figma">GitHub 저장소</a>
+      <a class="btn ghost" href="https://github.com/bogeun35/web-to-figma#설치">설치 방법</a>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>사용법</h2>
+    <p class="sub">플러그인 설치도, 파일 내보내기도 필요 없습니다. 복사 → 붙여넣기가 전부입니다.</p>
+    <ol class="steps">
+      <li><div><b>확장 아이콘 클릭</b><span>캡처할 웹페이지에서 툴바의 아이콘을 누릅니다.</span></div></li>
+      <li><div><b>범위와 해상도 선택</b><span>페이지 전체 또는 특정 영역(클릭으로 지정). 해상도는 현재 브라우저 그대로 또는 390~3440px 프리셋.</span></div></li>
+      <li><div><b>클립보드로 복사</b><span>버튼 하나로 변환이 끝납니다.</span></div></li>
+      <li><div><b>피그마에서 <kbd>Ctrl</kbd> + <kbd>V</kbd></b><span>레이어 구조가 그대로 붙습니다. 바로 편집할 수 있습니다.</span></div></li>
+    </ol>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>무엇이 그대로 들어오나</h2>
+    <p class="sub">붙여넣는 즉시 렌더됩니다. 별도 후처리가 필요하지 않습니다.</p>
+    <div class="grid">
+      <div class="card">
+        <h3><span class="dot" style="background:var(--red)"></span>텍스트</h3>
+        <p>글자·색상·크기·굵기·자간·줄바꿈까지. 이미지가 아닌 실제 텍스트 레이어입니다.</p>
+      </div>
+      <div class="card">
+        <h3><span class="dot" style="background:var(--purple)"></span>벡터 아이콘</h3>
+        <p>SVG 아이콘은 진짜 벡터 패스로. 구멍 뚫린 도형(돋보기 등)도 정확하게 재현됩니다.</p>
+      </div>
+      <div class="card">
+        <h3><span class="dot" style="background:var(--cyan)"></span>레이아웃 · 스타일</h3>
+        <p>DOM 계층 구조를 유지한 프레임 트리. 배경색·테두리·모서리 라운드·절대 좌표 그대로.</p>
+      </div>
+      <div class="card">
+        <h3><span class="dot" style="background:var(--green)"></span>해상도 프리셋</h3>
+        <p>390 / 768 / 1440 / 1920 / 2560 / 3440px. 지정한 너비로 페이지를 재배치해 최하단까지 캡처합니다.</p>
+      </div>
+    </div>
+    <p class="langnote">한국어 · English · 中文 · 日本語 지원</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>다른 방법과 비교</h2>
+    <p class="sub">기존 방식들이 놓치는 지점.</p>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>방식</th><th>결과물</th><th>한계</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>스크린샷 붙여넣기</td><td>이미지 1장</td><td>텍스트·색상 수정 불가</td></tr>
+          <tr><td>HTML → 피그마 플러그인</td><td>레이어</td><td>플러그인 설치·파일 준비 필요, 간격이 깨지기 쉬움</td></tr>
+          <tr><td><b>Web to Figma</b></td><td>레이어</td><td>클릭 한 번, 절대 좌표라 간격이 어긋나지 않음</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>알아두면 좋은 점</h2>
+    <ul class="plain">
+      <li><b>이미지</b>는 평균 색상 플레이스홀더로 들어옵니다. 클립보드 형식 자체가 이미지 원본 데이터를 담지 못하기 때문입니다.</li>
+      <li><b>그라디언트·그림자</b>는 아직 지원하지 않습니다.</li>
+      <li>페이지가 매우 크면 노드 수가 많아 변환에 몇 초 걸릴 수 있습니다. 영역 선택을 쓰면 빠릅니다.</li>
+      <li>캡처한 데이터는 <b>브라우저 안에서만</b> 처리되며 어디로도 전송되지 않습니다.</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap" style="display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center">
+    <span>© 2026 bogeun35</span>
+    <a href="https://github.com/bogeun35/web-to-figma">GitHub</a>
+    <a href="https://github.com/bogeun35/web-to-figma/blob/main/PRIVACY.md">개인정보처리방침</a>
+    <span style="color:var(--muted)">Figma는 Figma, Inc.의 상표입니다. 본 프로젝트는 Figma와 무관합니다.</span>
+  </div>
+</footer>
+
+<script>
+  // 사용자 테마 토글 지원(호스트가 data-theme를 심는 경우 대응)
+  (function(){ try{ var t=localStorage.getItem('theme'); if(t) document.documentElement.setAttribute('data-theme',t); }catch(e){} })();
+</script>
+</body>
+</html>

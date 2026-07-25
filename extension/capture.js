@@ -1,0 +1,193 @@
+/**
+ * Web → Figma 캡처 스크립트
+ * 사용법: 대상 페이지에서 F12 → Console에 전체 붙여넣기 → Enter
+ *        → JSON 파일이 자동 다운로드됨 (figma-capture.json)
+ * 특정 영역만 캡처: 실행 전에  window.__CAP_SELECTOR__ = '.bm-wrap'  처럼 지정
+ */
+(function () {
+  var MAX_NODES = 5000;
+  var count = 0;
+  var sx = window.scrollX, sy = window.scrollY;
+
+  function num(v) { var n = parseFloat(v); return isNaN(n) ? 0 : n; }
+
+  function isVisible(cs, r) {
+    if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+    if (num(cs.opacity) === 0) return false;
+    if (r.width < 1 || r.height < 1) return false;
+    return true;
+  }
+
+  // 요소 직속 텍스트 노드들 → TEXT 런 추출
+  function textRuns(el, cs) {
+    var runs = [];
+    for (var i = 0; i < el.childNodes.length; i++) {
+      var n = el.childNodes[i];
+      if (n.nodeType !== 3) continue;
+      var t = n.textContent.replace(/\s+/g, ' ');
+      if (!t.trim()) continue;
+      var range = document.createRange();
+      range.selectNodeContents(n);
+      var r = range.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+      runs.push({
+        type: 'TEXT', name: 'text',
+        x: r.left + sx, y: r.top + sy, w: Math.ceil(r.width) + 2, h: Math.ceil(r.height),
+        text: {
+          chars: t.trim(),
+          size: num(cs.fontSize) || 13,
+          weight: num(cs.fontWeight) || 400,
+          family: (cs.fontFamily || 'Noto Sans KR').split(',')[0].replace(/["']/g, '').trim(),
+          color: cs.color,
+          lh: cs.lineHeight === 'normal' ? 0 : num(cs.lineHeight),
+          ls: cs.letterSpacing === 'normal' ? 0 : num(cs.letterSpacing),
+          align: cs.textAlign
+        }
+      });
+    }
+    return runs;
+  }
+
+  function nodeName(el) {
+    var s = el.tagName.toLowerCase();
+    if (el.id) s += '#' + el.id;
+    else if (el.classList && el.classList.length) s += '.' + el.classList[0];
+    return s;
+  }
+
+  function walk(el) {
+    if (count > MAX_NODES) return null;
+    var cs = getComputedStyle(el);
+    var r = el.getBoundingClientRect();
+    if (!isVisible(cs, r)) return null;
+    count++;
+
+    var tag = el.tagName.toLowerCase();
+    var base = { x: r.left + sx, y: r.top + sy, w: Math.ceil(r.width), h: Math.ceil(r.height) };
+
+    // SVG → 통째로 벡터 임포트 (color: currentColor 해석용)
+    if (tag === 'svg') {
+      return Object.assign(base, { type: 'SVG', name: 'svg', svg: el.outerHTML, color: cs.color });
+    }
+
+    // 이미지 — 캔버스로 픽셀 추출(이미 로드된 픽셀이라 인증 불필요, CORS 허용 시):
+    //   avg  = 평균색(클립보드 흐름 플레이스홀더)
+    //   data = dataURL 인라인(플러그인 흐름 실픽셀 — 인증 URL fetch 실패 대비)
+    if (tag === 'img') {
+      var avg = '', dataUrl = '';
+      try {
+        var iw = el.naturalWidth || el.width, ih = el.naturalHeight || el.height;
+        var cv = document.createElement('canvas');
+        // 평균색 (8x8 다운샘플)
+        cv.width = 8; cv.height = 8;
+        var cx2 = cv.getContext('2d');
+        cx2.drawImage(el, 0, 0, 8, 8);
+        var px = cx2.getImageData(0, 0, 8, 8).data;   // cross-origin+비CORS면 여기서 throw
+        var rr = 0, gg = 0, bb = 0, np = 0;
+        for (var pi = 0; pi < px.length; pi += 4) { if (px[pi + 3] > 16) { rr += px[pi]; gg += px[pi + 1]; bb += px[pi + 2]; np++; } }
+        if (np) avg = 'rgb(' + Math.round(rr / np) + ', ' + Math.round(gg / np) + ', ' + Math.round(bb / np) + ')';
+        // dataURL 인라인 (최대 1024px로 축소, 2MB 초과 시 포기)
+        var scaleMax = 1024, sw = iw, sh2 = ih;
+        if (Math.max(iw, ih) > scaleMax) { var sc = scaleMax / Math.max(iw, ih); sw = Math.round(iw * sc); sh2 = Math.round(ih * sc); }
+        if (sw > 0 && sh2 > 0) {
+          cv.width = sw; cv.height = sh2;
+          cv.getContext('2d').drawImage(el, 0, 0, sw, sh2);
+          var du = cv.toDataURL('image/png');
+          if (du.length < 2 * 1024 * 1024) dataUrl = du;
+        }
+      } catch (e) { /* cross-origin 이미지는 실패 → src fetch에 맡김 */ }
+      return Object.assign(base, {
+        type: 'IMAGE', name: 'img',
+        src: el.currentSrc || el.src || '',
+        avg: avg,
+        data: dataUrl,
+        radius: [num(cs.borderTopLeftRadius), num(cs.borderTopRightRadius), num(cs.borderBottomRightRadius), num(cs.borderBottomLeftRadius)]
+      });
+    }
+
+    // 일반 요소 → FRAME
+    var node = Object.assign(base, {
+      type: 'FRAME',
+      name: nodeName(el),
+      styles: {
+        bg: cs.backgroundColor,
+        borderColor: cs.borderTopColor,
+        borderWidth: num(cs.borderTopWidth),
+        radius: [num(cs.borderTopLeftRadius), num(cs.borderTopRightRadius), num(cs.borderBottomRightRadius), num(cs.borderBottomLeftRadius)],
+        shadow: cs.boxShadow && cs.boxShadow !== 'none' ? cs.boxShadow : '',
+        clip: cs.overflow !== 'visible'
+      },
+      layout: {
+        display: cs.display,
+        dir: cs.flexDirection,
+        wrap: cs.flexWrap,
+        gap: num(cs.columnGap) || num(cs.rowGap) || 0,
+        pad: [num(cs.paddingTop), num(cs.paddingRight), num(cs.paddingBottom), num(cs.paddingLeft)],
+        justify: cs.justifyContent,
+        align: cs.alignItems
+      },
+      children: []
+    });
+
+    // 입력요소 → 값/placeholder를 텍스트로
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') {
+      var val = el.value || el.placeholder || '';
+      if (tag === 'select' && el.selectedIndex >= 0) val = el.options[el.selectedIndex] ? el.options[el.selectedIndex].text : val;
+      if (val) {
+        node.children.push({
+          type: 'TEXT', name: 'value',
+          x: base.x + num(cs.paddingLeft) + 2, y: base.y + base.h / 2 - num(cs.fontSize) * 0.7,
+          w: Math.max(base.w - num(cs.paddingLeft) - num(cs.paddingRight), 10), h: num(cs.fontSize) * 1.4,
+          text: { chars: String(val), size: num(cs.fontSize) || 12, weight: num(cs.fontWeight) || 400,
+            family: (cs.fontFamily || 'Noto Sans KR').split(',')[0].replace(/["']/g, '').trim(),
+            color: el.value ? cs.color : '#94a3b8', lh: 0, align: 'left' }
+        });
+      }
+      return node;
+    }
+
+    // 직속 텍스트 런
+    var runs = textRuns(el, cs);
+    for (var ri = 0; ri < runs.length; ri++) node.children.push(runs[ri]);
+
+    // 자식 요소
+    for (var ci = 0; ci < el.children.length; ci++) {
+      var ch = walk(el.children[ci]);
+      if (ch) node.children.push(ch);
+    }
+    return node;
+  }
+
+  var sel = window.__CAP_SELECTOR__ || null;
+  var rootEl = sel ? document.querySelector(sel) : document.body;
+  if (!rootEl) { console.error('[capture] 셀렉터 대상 없음: ' + sel); return; }
+
+  console.log('[capture] 시작... (' + (sel || 'body') + ')');
+  var root = walk(rootEl);
+  // 해상도 프리셋 캡처면 루트 이름에 @너비 표기 (피그마에서 어떤 해상도 기준인지 식별)
+  var capVw = window.__CAP_VIEWPORT__ || 0;
+  var vpW = window.innerWidth, vpH = window.innerHeight;
+  if (root && root.name) root.name = root.name + ' @' + (capVw > 0 ? capVw : vpW);
+  var out = {
+    meta: {
+      url: location.href, title: document.title, capturedAt: new Date().toISOString(), nodes: count,
+      viewport: { w: vpW, h: vpH, preset: capVw > 0 ? capVw : null }
+    },
+    root: root
+  };
+  // 클립보드 경로에서 팝업이 읽어갈 수 있도록 결과를 window에 노출
+  window.__CAP_RESULT__ = out;
+
+  // JSON 다운로드는 명시적으로 요청된 경우에만 (__CAP_DOWNLOAD__ !== false)
+  if (window.__CAP_DOWNLOAD__ !== false) {
+    var json = JSON.stringify(out);
+    var blob = new Blob([json], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'figma-capture.json';
+    a.click();
+    console.log('[capture] 완료: ' + count + '개 노드, ' + (json.length / 1024).toFixed(0) + 'KB → figma-capture.json 다운로드됨');
+  } else {
+    console.log('[capture] 완료: ' + count + '개 노드 (클립보드용, window.__CAP_RESULT__)');
+  }
+})();

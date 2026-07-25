@@ -1,0 +1,10 @@
+node_modules/
+*.bak
+*.log
+.DS_Store
+Thumbs.db
+
+# 개발 중 생성되는 캡처/샘플 산출물 (배포물 아님)
+out.html
+sample*.html
+figma-capture*.json

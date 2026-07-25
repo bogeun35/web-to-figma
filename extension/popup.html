@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Inter, 'Noto Sans KR', 'Malgun Gothic', sans-serif; width: 300px; background: #ffffff; color: #1e1e1e; font-size: 13px; }
+
+  /* 헤더 */
+  .head { display: flex; align-items: center; gap: 8px; padding: 14px 16px 12px; border-bottom: 1px solid #f0f0f0; }
+  .logo { display: grid; grid-template-columns: 7px 7px; grid-gap: 2px; }
+  .logo span { width: 7px; height: 7px; border-radius: 50%; }
+  .logo span:nth-child(1) { background: #F24E1E; }
+  .logo span:nth-child(2) { background: #A259FF; }
+  .logo span:nth-child(3) { background: #1ABCFE; }
+  .logo span:nth-child(4) { background: #0ACF83; }
+  .title { font-size: 12px; font-weight: 800; letter-spacing: .06em; white-space: nowrap; }
+  .langs { margin-left: auto; display: flex; gap: 3px; }
+  .langs button { border: none; background: none; cursor: pointer; padding: 3px; border-radius: 4px; opacity: .45; line-height: 0; }
+  .langs button:hover { opacity: .85; }
+  .langs button.on { opacity: 1; background: #ececec; }
+  .langs img { width: 19px; height: 14px; object-fit: cover; border-radius: 2px; display: block; box-shadow: 0 0 0 .5px rgba(0,0,0,.12); }
+
+  .body { padding: 14px 16px 16px; }
+  .label { font-size: 10px; font-weight: 700; color: #8c8c8c; letter-spacing: .08em; text-transform: uppercase; margin: 0 0 7px; }
+  .sect { margin-bottom: 15px; }
+
+  /* 범위 선택 세그먼트 */
+  .seg { display: flex; background: #f0f0f0; border-radius: 7px; padding: 2px; }
+  .seg button { flex: 1; border: none; background: none; font-size: 12px; font-weight: 600; color: #666; padding: 7px 0; border-radius: 6px; cursor: pointer; font-family: inherit; }
+  .seg button.on { background: #fff; color: #1e1e1e; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .chip { display: none; margin-top: 7px; align-items: center; gap: 6px; background: #E5F4FF; color: #0D99FF; font-size: 11px; font-weight: 600; padding: 5px 8px 5px 10px; border-radius: 6px; }
+  .chip.show { display: flex; }
+  .chip .txt { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip .x { border: none; background: none; color: #0D99FF; font-size: 13px; cursor: pointer; line-height: 1; padding: 0 2px; }
+
+  /* 해상도 */
+  select { width: 100%; border: 1px solid #e6e6e6; border-radius: 7px; padding: 8px 10px; font-size: 12px; font-family: inherit; background: #fff; color: #1e1e1e; outline: none; }
+  select:focus { border-color: #0D99FF; }
+
+  /* 메인 버튼 */
+  #copy { width: 100%; border: none; border-radius: 8px; background: #0D99FF; color: #fff; font-size: 13px; font-weight: 700; padding: 12px; cursor: pointer; font-family: inherit; }
+  #copy:hover { background: #0B87E0; }
+  #copy:disabled { background: #b3ddff; cursor: default; }
+
+  /* 상태 */
+  #status { margin-top: 10px; font-size: 12px; line-height: 1.55; color: #666; white-space: pre-wrap; min-height: 18px; text-align: center; }
+  #status.ok { color: #0ACF83; font-weight: 600; }
+  #status.err { color: #F24E1E; font-weight: 600; }
+
+  /* 후원 — 아코디언 (기본 접힘, 은은하게) */
+  .donate { border-top: 1px solid #f0f0f0; }
+  .donate > button { width: 100%; border: none; background: none; display: flex; align-items: center; justify-content: space-between; font-size: 10px; color: #b8b8b8; padding: 9px 16px; cursor: pointer; font-family: inherit; }
+  .donate > button:hover { color: #666; }
+  .donate .chev { font-size: 9px; transition: transform .15s; }
+  .donate.open .chev { transform: rotate(90deg); }
+  .donate .qrwrap { max-height: 0; overflow: hidden; transition: max-height .2s ease; text-align: center; }
+  .donate.open .qrwrap { max-height: 260px; padding-bottom: 16px; }
+  .donate img.qr { width: 160px; height: auto; border-radius: 8px; border: 1px solid #f0f0f0; }
+  .donate .cap { font-size: 10px; color: #8c8c8c; margin-top: 6px; }
+</style></head>
+<body>
+  <div class="head">
+    <div class="logo"><span></span><span></span><span></span><span></span></div>
+    <div class="title">WEB TO FIGMA</div>
+    <div class="langs">
+      <button data-lang="ko" title="한국어"><img src="flags/kr.svg" alt="한국어"></button>
+      <button data-lang="en" title="English"><img src="flags/us.svg" alt="English"></button>
+      <button data-lang="zh" title="中文"><img src="flags/cn.svg" alt="中文"></button>
+      <button data-lang="ja" title="日本語"><img src="flags/jp.svg" alt="日本語"></button>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="sect">
+      <div class="label" data-i18n="scope">범위 선택</div>
+      <div class="seg">
+        <button id="scopeFull" class="on" data-i18n="full">전체 페이지</button>
+        <button id="scopePick" data-i18n="pick">영역 선택</button>
+      </div>
+      <div class="chip" id="chip">
+        <span class="txt" id="chipTxt"></span>
+        <button class="x" id="chipX" title="선택 해제">✕</button>
+      </div>
+    </div>
+
+    <div class="sect">
+      <div class="label" data-i18n="resolution">캡처 해상도</div>
+      <select id="vw">
+        <option value="0" selected data-i18n="current">현재 브라우저 그대로</option>
+        <option value="390">390 — Mobile</option>
+        <option value="768">768 — Tablet</option>
+        <option value="1440">1440 — Laptop</option>
+        <option value="1920">1920 — Desktop</option>
+        <option value="2560">2560 — QHD</option>
+        <option value="3440">3440 — UWQHD</option>
+      </select>
+    </div>
+
+    <button id="copy" data-i18n="copy">클립보드로 복사</button>
+    <div id="status"></div>
+  </div>
+
+    </div>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body></html>
