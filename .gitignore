@@ -9,3 +9,6 @@ out.html
 sample*.html
 figma-capture*.json
 docs/web-to-figma-v2.0.zip
+
+# 릴리스 zip은 저장소에 넣지 않는다 (GitHub Releases 자산으로만 배포)
+web-to-figma-v*.zip
