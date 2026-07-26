@@ -9,8 +9,10 @@ var I18N = {
     success: "정상적으로 클립보드에 복사되었습니다.\n피그마에서 Ctrl+V 하세요.",
     error: "문제로 에러가 발생하였습니다. (에러코드 {code})",
     pickHint: "캡처할 영역을 클릭하세요 (ESC 취소)",
-    pickDone: "영역이 선택되었습니다. 확장 아이콘을 다시 눌러 복사하세요.",
-    pickGo: "페이지에서 영역을 클릭해 주세요."
+    pickWorking: "변환 중...",
+    pickDone: "복사 완료 — 피그마에서 Ctrl+V 하세요",
+    pickFail: "복사 실패",
+    pickGo: "페이지에서 영역을 클릭하면 바로 복사됩니다."
   },
   en: {
     scope: "Capture area", full: "Full page", pick: "Pick element", resolution: "Resolution",
@@ -19,8 +21,10 @@ var I18N = {
     success: "Copied to clipboard.\nPress Ctrl+V in Figma.",
     error: "An error occurred. (code {code})",
     pickHint: "Click an element to capture (ESC to cancel)",
-    pickDone: "Element selected. Click the extension icon again to copy.",
-    pickGo: "Click an element on the page."
+    pickWorking: "Converting...",
+    pickDone: "Copied — press Ctrl+V in Figma",
+    pickFail: "Copy failed",
+    pickGo: "Click an element on the page to copy it."
   },
   zh: {
     scope: "捕获范围", full: "整个页面", pick: "选择区域", resolution: "分辨率",
@@ -29,8 +33,10 @@ var I18N = {
     success: "已成功复制到剪贴板。\n请在 Figma 中按 Ctrl+V。",
     error: "发生错误。(错误代码 {code})",
     pickHint: "点击要捕获的区域 (ESC 取消)",
-    pickDone: "已选择区域。请再次点击扩展图标进行复制。",
-    pickGo: "请在页面上点击要选择的区域。"
+    pickWorking: "转换中...",
+    pickDone: "已复制 — 请在 Figma 中按 Ctrl+V",
+    pickFail: "复制失败",
+    pickGo: "在页面上点击区域即可直接复制。"
   },
   ja: {
     scope: "キャプチャ範囲", full: "ページ全体", pick: "要素を選択", resolution: "解像度",
@@ -39,8 +45,10 @@ var I18N = {
     success: "クリップボードにコピーしました。\nFigma で Ctrl+V を押してください。",
     error: "エラーが発生しました。(エラーコード {code})",
     pickHint: "キャプチャする要素をクリック (ESC でキャンセル)",
-    pickDone: "要素を選択しました。拡張アイコンをもう一度クリックしてコピーしてください。",
-    pickGo: "ページ上で要素をクリックしてください。"
+    pickWorking: "変換中...",
+    pickDone: "コピーしました — Figma で Ctrl+V",
+    pickFail: "コピー失敗",
+    pickGo: "ページ上で要素をクリックすると、そのままコピーされます。"
   }
 };
 var lang = "ko";
@@ -104,8 +112,8 @@ document.getElementById("scopePick").addEventListener("click", async function ()
     if (/^(chrome|edge|about|chrome-extension):/.test(tab.url || "")) return fail(1002);
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: function (hint, done) { window.__PICKER_MSG__ = { hint: hint, done: done }; },
-      args: [T("pickHint"), T("pickDone")]
+      func: function (m) { window.__PICKER_MSG__ = m; },
+      args: [{ hint: T("pickHint"), working: T("pickWorking"), done: T("pickDone"), fail: T("pickFail") }]
     });
     await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["picker.js"] });
     setStatus(T("pickGo"), "");
@@ -216,15 +224,12 @@ document.getElementById("copy").addEventListener("click", async function () {
     var cap = null;
     try {
       setStatus(T("capturing"), "");
-      await chrome.scripting.executeScript({
-        target: { tabId: tabId },
-        func: function (s, w) { window.__CAP_SELECTOR__ = s || null; window.__CAP_VIEWPORT__ = w || 0; window.__CAP_DOWNLOAD__ = false; },
-        args: [sel, vw]
-      });
-      await chrome.scripting.executeScript({ target: { tabId: tabId }, files: ["capture.js"] });
+      /* capture.js를 ES 모듈로 동적 import 해서 결과를 바로 받는다.
+         픽커(picker.js)도 같은 모듈을 쓰므로 캡처 로직이 한 곳에만 있다. */
       var res = await chrome.scripting.executeScript({
         target: { tabId: tabId },
-        func: function () { return window.__CAP_RESULT__ || null; }
+        func: async function (url, s, w) { var m = await import(url); return m.capture(s || null, w || 0); },
+        args: [chrome.runtime.getURL("capture.js"), sel, vw]
       });
       cap = res && res[0] ? res[0].result : null;
       if (!cap || !cap.root) throw new Error("no capture result");

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Web to Figma",
-  "version": "2.0",
+  "version": "2.1",
   "description": "웹페이지를 캡처해 피그마 레이어로 클립보드에 복사합니다. Copy any webpage to Figma as editable layers.",
   "icons": {
     "16": "icons/icon16.png",
@@ -18,5 +18,19 @@
     }
   },
   "permissions": ["scripting", "activeTab", "debugger", "clipboardWrite", "storage"],
-  "host_permissions": ["http://*/*", "https://*/*"]
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "capture.js",
+        "figma-encoder.js",
+        "glyph-baker.js",
+        "svg-path.js",
+        "svg-vector.js",
+        "lib/*",
+        "assets/*"
+      ],
+      "matches": ["http://*/*", "https://*/*"]
+    }
+  ]
 }

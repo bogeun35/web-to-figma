@@ -1,10 +1,10 @@
 /**
- * Web → Figma 캡처 스크립트
- * 사용법: 대상 페이지에서 F12 → Console에 전체 붙여넣기 → Enter
- *        → JSON 파일이 자동 다운로드됨 (figma-capture.json)
- * 특정 영역만 캡처: 실행 전에  window.__CAP_SELECTOR__ = '.bm-wrap'  처럼 지정
+ * Web → Figma 캡처 (ES 모듈)
+ *   capture(selector, viewport) → { meta, root }
+ * DOM을 훑어 노드 트리를 만든다. selector가 없으면 body 전체.
+ * 팝업(전체 캡처)과 픽커(영역 선택 즉시 복사)가 이 한 파일을 공유한다.
  */
-(function () {
+export function capture(selector, viewport) {
   var MAX_NODES = 5000;
   var count = 0;
   var sx = window.scrollX, sy = window.scrollY;
@@ -158,14 +158,14 @@
     return node;
   }
 
-  var sel = window.__CAP_SELECTOR__ || null;
+  var sel = selector || null;
   var rootEl = sel ? document.querySelector(sel) : document.body;
-  if (!rootEl) { console.error('[capture] 셀렉터 대상 없음: ' + sel); return; }
+  if (!rootEl) throw new Error('선택한 영역을 찾을 수 없습니다: ' + sel);
 
   console.log('[capture] 시작... (' + (sel || 'body') + ')');
   var root = walk(rootEl);
   // 해상도 프리셋 캡처면 루트 이름에 @너비 표기 (피그마에서 어떤 해상도 기준인지 식별)
-  var capVw = window.__CAP_VIEWPORT__ || 0;
+  var capVw = viewport || 0;
   var vpW = window.innerWidth, vpH = window.innerHeight;
   if (root && root.name) root.name = root.name + ' @' + (capVw > 0 ? capVw : vpW);
   var out = {
@@ -175,19 +175,6 @@
     },
     root: root
   };
-  // 클립보드 경로에서 팝업이 읽어갈 수 있도록 결과를 window에 노출
-  window.__CAP_RESULT__ = out;
-
-  // JSON 다운로드는 명시적으로 요청된 경우에만 (__CAP_DOWNLOAD__ !== false)
-  if (window.__CAP_DOWNLOAD__ !== false) {
-    var json = JSON.stringify(out);
-    var blob = new Blob([json], { type: 'application/json' });
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'figma-capture.json';
-    a.click();
-    console.log('[capture] 완료: ' + count + '개 노드, ' + (json.length / 1024).toFixed(0) + 'KB → figma-capture.json 다운로드됨');
-  } else {
-    console.log('[capture] 완료: ' + count + '개 노드 (클립보드용, window.__CAP_RESULT__)');
-  }
-})();
+  console.log('[capture] 완료: ' + count + '개 노드');
+  return out;
+}
