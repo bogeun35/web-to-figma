@@ -87,8 +87,9 @@
   /* 선택 → 캡처 → 변환 → 클립보드 (팝업 재오픈 불필요) */
   function copySelected(sel) {
     var build = (async function () {
-      var capMod = await import(chrome.runtime.getURL('capture.js'));
-      var cap = capMod.capture(sel, 0);
+      // capture.js 는 모듈로 불러도, 이미 주입돼 있어도 전역 __figmaCapture 로 잡힌다.
+      if (!globalThis.__figmaCapture) await import(chrome.runtime.getURL('capture.js'));
+      var cap = globalThis.__figmaCapture(sel, 0);
       var encMod = await import(chrome.runtime.getURL('figma-encoder.js'));
       var built = await encMod.buildClipboardHtml(cap);
       return new Blob([built.html], { type: 'text/html' });

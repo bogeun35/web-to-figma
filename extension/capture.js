@@ -4,7 +4,7 @@
  * DOM을 훑어 노드 트리를 만든다. selector가 없으면 body 전체.
  * 팝업(전체 캡처)과 픽커(영역 선택 즉시 복사)가 이 한 파일을 공유한다.
  */
-export function capture(selector, viewport) {
+function capture(selector, viewport) {
   var MAX_NODES = 5000;
   var count = 0;
   var sx = window.scrollX, sy = window.scrollY;
@@ -15,12 +15,38 @@ export function capture(selector, viewport) {
     if (cs.display === 'none' || cs.visibility === 'hidden') return false;
     if (num(cs.opacity) === 0) return false;
     if (r.width < 1 || r.height < 1) return false;
+    if (isScreenReaderOnly(cs, r)) return false;
     return true;
+  }
+
+  /* 화면낭독기 전용으로 숨긴 요소 판별 — 눈에는 안 보이는데 글자는 들어있다.
+     이걸 걸러내지 않으면 "알림", "이전 페이지", "최고기온" 같은 글자가
+     진짜 글자 위에 겹쳐 찍힌다. (네이버 메인 기준 전체 글자의 12%가 이것) */
+  function isScreenReaderOnly(cs, r) {
+    // 1x1 상자에 숨긴 고전적인 .blind / .sr-only 패턴
+    if (r.width <= 2 && r.height <= 2) return true;
+    // clip 으로 잘라 없앤 경우 — clip: rect(0,0,0,0)
+    if (cs.clip && cs.clip !== 'auto' && cs.clip !== 'none') {
+      var cn = cs.clip.match(/-?\d+(\.\d+)?/g);
+      if (cn && cn.length === 4) {
+        var top = parseFloat(cn[0]), right = parseFloat(cn[1]), bottom = parseFloat(cn[2]), left = parseFloat(cn[3]);
+        if (Math.abs(right - left) <= 1 || Math.abs(bottom - top) <= 1) return true;
+      }
+    }
+    // clip-path 로 잘라 없앤 경우 — clip-path: inset(50%) / inset(100%)
+    if (cs.clipPath && /inset\(\s*(100|5[0-9]|[6-9][0-9])(\.\d+)?%/.test(cs.clipPath)) return true;
+    // 화면 밖으로 멀리 밀어낸 경우 — left:-9999px
+    if (r.right + sx < -2000 || r.bottom + sy < -2000) return true;
+    return false;
   }
 
   // 요소 직속 텍스트 노드들 → TEXT 런 추출
   function textRuns(el, cs) {
     var runs = [];
+    // 글자만 숨긴 경우 — 자식 요소는 살려야 하므로 요소째 버리지 않고 글자만 건너뛴다.
+    if (num(cs.fontSize) === 0) return runs;                 // font-size:0
+    if (num(cs.textIndent) <= -999) return runs;             // text-indent:-9999px
+    if (/^rgba\(.*,\s*0\)$/.test(cs.color || '')) return runs; // 투명 글자
     for (var i = 0; i < el.childNodes.length; i++) {
       var n = el.childNodes[i];
       if (n.nodeType !== 3) continue;
@@ -178,3 +204,9 @@ export function capture(selector, viewport) {
   console.log('[capture] 완료: ' + count + '개 노드');
   return out;
 }
+
+/* 이 파일은 두 가지 방법으로 쓰인다.
+   1) ES 모듈로 import  — 평소 경로
+   2) 일반 스크립트로 주입 — 사이트 보안정책(CSP)이 모듈 import 를 막을 때의 대비책
+   어느 쪽이든 아래 전역에 함수가 걸리므로, 호출하는 쪽은 이것만 보면 된다. */
+globalThis.__figmaCapture = capture;

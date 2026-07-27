@@ -179,6 +179,35 @@ async function enrichImages(cap) {
   }));
 }
 
+/* ═══ 캡처 실행 — 두 가지 방법을 순서대로 시도 ═══
+   1) 모듈 import : 평소 경로. capture.js 를 페이지 안에서 모듈로 불러 실행한다.
+   2) 파일 주입   : 1)이 막히는 사이트가 있다(보안정책이 강한 사내 시스템·은행 등).
+                    그럴 때 capture.js 를 일반 스크립트로 밀어넣고 전역 함수를 호출한다.
+   둘 다 실패해야 에러(1004)로 처리한다. */
+async function runCapture(tabId, sel, vw) {
+  var url = chrome.runtime.getURL("capture.js");
+  // 1) 모듈 import
+  try {
+    var res = await chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      func: async function (u, s, w) { await import(u); return globalThis.__figmaCapture(s || null, w || 0); },
+      args: [url, sel, vw]
+    });
+    var cap = res && res[0] ? res[0].result : null;
+    if (cap && cap.root) return cap;
+  } catch (e) {
+    console.warn("[figma-clipboard] 모듈 방식 실패 → 파일 주입으로 재시도", e);
+  }
+  // 2) 파일 주입
+  await chrome.scripting.executeScript({ target: { tabId: tabId }, files: ["capture.js"] });
+  var res2 = await chrome.scripting.executeScript({
+    target: { tabId: tabId },
+    func: function (s, w) { return globalThis.__figmaCapture(s || null, w || 0); },
+    args: [sel, vw]
+  });
+  return res2 && res2[0] ? res2[0].result : null;
+}
+
 /* ═══ 클립보드로 복사 (메인) ═══ */
 document.getElementById("copy").addEventListener("click", async function () {
   var btn = this;
@@ -224,14 +253,7 @@ document.getElementById("copy").addEventListener("click", async function () {
     var cap = null;
     try {
       setStatus(T("capturing"), "");
-      /* capture.js를 ES 모듈로 동적 import 해서 결과를 바로 받는다.
-         픽커(picker.js)도 같은 모듈을 쓰므로 캡처 로직이 한 곳에만 있다. */
-      var res = await chrome.scripting.executeScript({
-        target: { tabId: tabId },
-        func: async function (url, s, w) { var m = await import(url); return m.capture(s || null, w || 0); },
-        args: [chrome.runtime.getURL("capture.js"), sel, vw]
-      });
-      cap = res && res[0] ? res[0].result : null;
+      cap = await runCapture(tabId, sel, vw);
       if (!cap || !cap.root) throw new Error("no capture result");
     } catch (e) { fail(1004, e); return; }
 
