@@ -9,6 +9,20 @@ function capture(selector, viewport) {
   var count = 0;
   var sx = window.scrollX, sy = window.scrollY;
 
+  /* iframe 처리 —
+     이 함수는 페이지의 모든 프레임에서 각각 돌아간다. 자기 문서만 캡처하고,
+     끼워진 프레임 자리에는 표시만 남긴다. 합치는 일은 팝업이 한다. */
+  var IFRAMES = Array.prototype.slice.call(document.querySelectorAll('iframe'));
+  // 내가 부모의 몇 번째 프레임인지 — 다른 도메인이어도 이 비교는 허용된다.
+  var selfIndex = -1;
+  if (window !== window.top) {
+    try {
+      for (var fi = 0; fi < window.parent.frames.length; fi++) {
+        if (window.parent.frames[fi] === window) { selfIndex = fi; break; }
+      }
+    } catch (e) { /* 접근 불가면 -1 로 두고 주소로 맞춘다 */ }
+  }
+
   function num(v) { var n = parseFloat(v); return isNaN(n) ? 0 : n; }
 
   function isVisible(cs, r) {
@@ -172,6 +186,15 @@ function capture(selector, viewport) {
       return node;
     }
 
+    // 끼워진 페이지(iframe) — 자리와 식별정보만 남긴다. 내용은 그 프레임에서 따로 캡처해 팝업이 채운다.
+    if (tag === 'iframe') {
+      node.name = 'iframe';
+      node.frameHost = true;
+      node.frameIdx = IFRAMES.indexOf(el);
+      node.frameSrc = el.src || '';
+      return node;
+    }
+
     // 직속 텍스트 런
     var runs = textRuns(el, cs);
     for (var ri = 0; ri < runs.length; ri++) node.children.push(runs[ri]);
@@ -185,6 +208,7 @@ function capture(selector, viewport) {
   }
 
   var sel = selector || null;
+  if (sel && window !== window.top) sel = null;   // 하위 프레임에는 그 선택자가 없다 — 프레임 전체를 캡처
   var rootEl = sel ? document.querySelector(sel) : document.body;
   if (!rootEl) throw new Error('선택한 영역을 찾을 수 없습니다: ' + sel);
 
@@ -197,7 +221,8 @@ function capture(selector, viewport) {
   var out = {
     meta: {
       url: location.href, title: document.title, capturedAt: new Date().toISOString(), nodes: count,
-      viewport: { w: vpW, h: vpH, preset: capVw > 0 ? capVw : null }
+      viewport: { w: vpW, h: vpH, preset: capVw > 0 ? capVw : null },
+      selfIndex: selfIndex, isTop: window === window.top
     },
     root: root
   };

@@ -185,27 +185,118 @@ async function enrichImages(cap) {
                     그럴 때 capture.js 를 일반 스크립트로 밀어넣고 전역 함수를 호출한다.
    둘 다 실패해야 에러(1004)로 처리한다. */
 async function runCapture(tabId, sel, vw) {
+  var results = await injectAll(tabId, sel, vw);
+  var top = null;
+  for (var i = 0; i < results.length; i++) if (results[i].frameId === 0) top = results[i];
+  if (!top || !top.result || !top.result.root) return null;
+  await mergeFrames(tabId, top.result, results);
+  return top.result;
+}
+
+/* 페이지의 모든 프레임에 캡처를 주입한다 (끼워진 페이지 안까지).
+   확장 프로그램은 사이트 접근 권한이 있어서 다른 도메인 프레임에도 들어갈 수 있다. */
+async function injectAll(tabId, sel, vw) {
   var url = chrome.runtime.getURL("capture.js");
+  var target = { tabId: tabId, allFrames: true };
   // 1) 모듈 import
   try {
     var res = await chrome.scripting.executeScript({
-      target: { tabId: tabId },
+      target: target,
       func: async function (u, s, w) { await import(u); return globalThis.__figmaCapture(s || null, w || 0); },
       args: [url, sel, vw]
     });
-    var cap = res && res[0] ? res[0].result : null;
-    if (cap && cap.root) return cap;
+    for (var i = 0; i < res.length; i++) if (res[i].frameId === 0 && res[i].result && res[i].result.root) return res;
   } catch (e) {
     console.warn("[figma-clipboard] 모듈 방식 실패 → 파일 주입으로 재시도", e);
   }
   // 2) 파일 주입
-  await chrome.scripting.executeScript({ target: { tabId: tabId }, files: ["capture.js"] });
-  var res2 = await chrome.scripting.executeScript({
-    target: { tabId: tabId },
+  await chrome.scripting.executeScript({ target: target, files: ["capture.js"] });
+  return await chrome.scripting.executeScript({
+    target: target,
     func: function (s, w) { return globalThis.__figmaCapture(s || null, w || 0); },
     args: [sel, vw]
   });
-  return res2 && res2[0] ? res2[0].result : null;
+}
+
+/* 프레임별로 따로 캡처된 결과를 바깥 페이지의 iframe 자리에 얹는다. */
+async function mergeFrames(tabId, topCap, results) {
+  // 프레임 부모-자식 관계 (없으면 전부 최상위의 자식으로 본다)
+  var tree = [];
+  try { tree = await chrome.webNavigation.getAllFrames({ tabId: tabId }); } catch (e) { tree = []; }
+  var parentOf = {};
+  for (var i = 0; i < tree.length; i++) parentOf[tree[i].frameId] = tree[i].parentFrameId;
+
+  var rootOf = { 0: topCap.root };
+  var byId = {};
+  for (var j = 0; j < results.length; j++) {
+    if (results[j].frameId !== 0 && results[j].result && results[j].result.root) byId[results[j].frameId] = results[j].result;
+  }
+
+  var placed = 0, missed = 0;
+  var ids = Object.keys(byId).map(Number);
+  // 부모가 먼저 자리를 잡도록 얕은 프레임부터 처리
+  ids.sort(function (a, b) { return depthOf(a, parentOf) - depthOf(b, parentOf); });
+
+  for (var k = 0; k < ids.length; k++) {
+    var fid = ids[k];
+    var cap = byId[fid];
+    var pid = parentOf[fid];
+    if (pid === undefined || pid < 0) pid = 0;
+    var parentRoot = rootOf[pid] || topCap.root;
+    var host = findFrameHost(parentRoot, cap);
+    if (!host) { missed++; continue; }
+    // 프레임 문서의 원점을 iframe 상자 위치로 옮긴다
+    offsetTree(cap.root, host.x, host.y);
+    host.children = host.children || [];
+    host.children.push(cap.root);
+    host.__filled = true;
+    rootOf[fid] = cap.root;
+    placed++;
+  }
+  console.log("[figma-clipboard] 끼워진 페이지 " + placed + "개 반영" + (missed ? " / " + missed + "개 자리 못 찾음" : ""));
+}
+
+function depthOf(fid, parentOf) {
+  var d = 0, cur = fid;
+  while (cur && parentOf[cur] !== undefined && parentOf[cur] >= 0 && d < 20) { cur = parentOf[cur]; d++; }
+  return d;
+}
+
+/* 자리 찾기 — 세 가지를 순서대로 시도한다.
+   1) 부모에서 몇 번째 프레임인지  2) 주소  3) 상자 크기
+   광고 프레임은 주소가 about:blank 라 1·3번으로 잡는다. */
+function findFrameHost(parentRoot, cap) {
+  var m = cap.meta || {};
+  var vp = m.viewport || {};
+  return searchHost(parentRoot, function (n) { return m.selfIndex >= 0 && n.frameIdx === m.selfIndex; })
+    || searchHost(parentRoot, function (n) { return m.url && n.frameSrc && sameUrl(n.frameSrc, m.url); })
+    || searchHost(parentRoot, function (n) { return vp.w && Math.abs(n.w - vp.w) <= 2 && Math.abs(n.h - vp.h) <= 2; });
+}
+
+function searchHost(node, ok) {
+  if (!node) return null;
+  if (node.frameHost && !node.__filled && ok(node)) return node;
+  var ch = node.children || [];
+  for (var i = 0; i < ch.length; i++) {
+    var f = searchHost(ch[i], ok);
+    if (f) return f;
+  }
+  return null;
+}
+
+function sameUrl(a, b) {
+  try {
+    var ua = new URL(a, location.href), ub = new URL(b, location.href);
+    return ua.origin === ub.origin && ua.pathname === ub.pathname;
+  } catch (e) { return a === b; }
+}
+
+function offsetTree(node, dx, dy) {
+  if (!node) return;
+  node.x = (node.x || 0) + dx;
+  node.y = (node.y || 0) + dy;
+  var ch = node.children || [];
+  for (var i = 0; i < ch.length; i++) offsetTree(ch[i], dx, dy);
 }
 
 /* ═══ 클립보드로 복사 (메인) ═══ */
