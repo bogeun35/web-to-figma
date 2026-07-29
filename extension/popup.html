@@ -13,6 +13,13 @@
   .logo span:nth-child(3) { background: #1ABCFE; }
   .logo span:nth-child(4) { background: #0ACF83; }
   .title { font-size: 12px; font-weight: 800; letter-spacing: .06em; white-space: nowrap; }
+  /* 새 버전 안내 줄 */
+  .upd { display: flex; align-items: center; gap: 6px; padding: 9px 16px; background: #eef5ff;
+         border-bottom: 1px solid #d6e6ff; color: #1b6fd8; font-size: 11px; font-weight: 600;
+         text-decoration: none; cursor: pointer; }
+  .upd:hover { background: #e2eeff; }
+  .upd .updTxt { flex: 1; }
+  .upd .updGo { font-size: 13px; opacity: .7; }
   .langs { margin-left: auto; display: flex; gap: 3px; }
   .langs button { border: none; background: none; cursor: pointer; padding: 3px; border-radius: 4px; opacity: .45; line-height: 0; }
   .langs button:hover { opacity: .85; }
@@ -59,6 +66,11 @@
     </div>
   </div>
 
+  <!-- 새 버전 안내 — 최신 릴리스 확인 후에만 보인다 (popup.js) -->
+  <a id="upd" class="upd" href="#" target="_blank" rel="noopener" hidden>
+    <span class="updTxt" id="updTxt"></span><span class="updGo">›</span>
+  </a>
+
   <div class="body">
     <div class="sect">
       <div class="label" data-i18n="scope">범위 선택</div>
@@ -89,8 +101,6 @@
     <div id="status"></div>
   </div>
 
-    </div>
-  </div>
 
   <script type="module" src="popup.js"></script>
 </body></html>

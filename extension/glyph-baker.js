@@ -91,9 +91,17 @@ export function bakeText(font, chars, fontSize, lineHeight, blobBase, blobCache,
 
   const glyphs = [], baselines = [], blobs = [];
   let maxLineW = 0;
+  /* 첫 줄 기준선 —
+     브라우저가 준 글자 상자(boxH)는 line-height 여백이 **이미 반영된** 위치·크기다.
+     (실측: font 14px / line-height 30px → 상자 높이 16px, 상단은 요소보다 7px 아래)
+     그래서 여기서 여백을 또 더하면 글자가 그만큼 아래로 밀린다. 상자 안에서
+     ascent:descent 비율로만 기준선을 잡는다. boxH 를 모르면 예전 방식으로 되돌린다. */
+  const ascRatio = ascPx / (ascPx + descPx);
+  const contentH = opts.boxH > 0 ? Math.max(fontSize, opts.boxH - (visLines.length - 1) * lh) : 0;
+  const firstBase = contentH > 0 ? contentH * ascRatio : baselineIn(lh);
   visLines.forEach((vl, li) => {
     let penX = 0;
-    const baseY = li * lh + baselineIn(lh);
+    const baseY = li * lh + firstBase;
     let ci = vl.startChar;
     for (const cp of vl.cps) {
       const { g, advPx } = advOf(cp);

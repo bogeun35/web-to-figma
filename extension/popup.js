@@ -12,6 +12,7 @@ var I18N = {
     pickWorking: "변환 중...",
     pickDone: "복사 완료 — 피그마에서 Ctrl+V 하세요",
     pickFail: "복사 실패",
+    updateFound: "새 버전 v{v} 이 나왔습니다 — 받으러 가기",
     pickGo: "페이지에서 영역을 클릭하면 바로 복사됩니다."
   },
   en: {
@@ -24,6 +25,7 @@ var I18N = {
     pickWorking: "Converting...",
     pickDone: "Copied — press Ctrl+V in Figma",
     pickFail: "Copy failed",
+    updateFound: "Version v{v} is available — get it",
     pickGo: "Click an element on the page to copy it."
   },
   zh: {
@@ -36,6 +38,7 @@ var I18N = {
     pickWorking: "转换中...",
     pickDone: "已复制 — 请在 Figma 中按 Ctrl+V",
     pickFail: "复制失败",
+    updateFound: "新版本 v{v} 已发布 — 前往下载",
     pickGo: "在页面上点击区域即可直接复制。"
   },
   ja: {
@@ -48,6 +51,7 @@ var I18N = {
     pickWorking: "変換中...",
     pickDone: "コピーしました — Figma で Ctrl+V",
     pickFail: "コピー失敗",
+    updateFound: "新しいバージョン v{v} が公開されました — 入手する",
     pickGo: "ページ上で要素をクリックすると、そのままコピーされます。"
   }
 };
@@ -57,6 +61,10 @@ var T = function (k) { return (I18N[lang] && I18N[lang][k]) || I18N.ko[k] || k; 
 function applyLang() {
   document.querySelectorAll("[data-i18n]").forEach(function (el) { el.textContent = T(el.getAttribute("data-i18n")); });
   document.querySelectorAll(".langs button").forEach(function (b) { b.classList.toggle("on", b.getAttribute("data-lang") === lang); });
+  if (updShown) {
+    var ut = document.getElementById("updTxt");
+    if (ut) ut.textContent = T("updateFound").replace("{v}", updShown);
+  }
 }
 document.querySelectorAll(".langs button").forEach(function (b) {
   b.addEventListener("click", function () {
@@ -65,6 +73,47 @@ document.querySelectorAll(".langs button").forEach(function (b) {
     applyLang();
   });
 });
+
+/* ═══ 새 버전 안내 ═══
+   압축을 풀어 넣는 방식은 크롬이 자동으로 갱신하지 않는다. 그래서 최신 릴리스 번호만 확인해
+   새 버전이 있으면 안내 줄을 띄우고, 누르면 소개 웹페이지로 보낸다.
+   하루 한 번만 조회하고 결과는 저장해 재사용한다. */
+var SITE_URL = "https://bogeun35.github.io/web-to-figma/";
+var RELEASE_API = "https://api.github.com/repos/bogeun35/web-to-figma/releases/latest";
+var CHECK_INTERVAL = 24 * 60 * 60 * 1000;
+
+function verNum(v) {
+  var p = String(v || "").replace(/^v/i, "").split(".");
+  return (parseInt(p[0], 10) || 0) * 10000 + (parseInt(p[1], 10) || 0) * 100 + (parseInt(p[2], 10) || 0);
+}
+
+var updShown = "";   // 언어를 바꿨을 때 안내 문구도 같이 바뀌게 기억해 둔다
+
+function showUpdate(latest) {
+  var el = document.getElementById("upd");
+  if (!el) return;
+  updShown = latest;
+  document.getElementById("updTxt").textContent = T("updateFound").replace("{v}", latest);
+  el.href = SITE_URL;
+  el.hidden = false;
+}
+
+async function checkUpdate() {
+  var cur = chrome.runtime.getManifest().version;
+  try {
+    var st = await chrome.storage.local.get(["updLatest", "updAt"]);
+    if (st.updAt && Date.now() - st.updAt < CHECK_INTERVAL) {
+      if (st.updLatest && verNum(st.updLatest) > verNum(cur)) showUpdate(st.updLatest);
+      return;
+    }
+    var r = await fetch(RELEASE_API, { headers: { Accept: "application/vnd.github+json" } });
+    if (!r.ok) return;
+    var j = await r.json();
+    var latest = String(j.tag_name || "").replace(/^v/i, "");
+    await chrome.storage.local.set({ updLatest: latest, updAt: Date.now() });
+    if (latest && verNum(latest) > verNum(cur)) showUpdate(latest);
+  } catch (e) { /* 조회 실패는 조용히 무시 — 복사 기능과 무관하다 */ }
+}
 
 /* ═══ 상태/에러 ═══
    에러코드: 1001 탭없음 | 1002 미지원페이지 | 1003 해상도(디버거) | 1004 캡처 | 1005 변환 | 1006 클립보드 | 1007 영역선택 */
@@ -338,12 +387,41 @@ document.getElementById("copy").addEventListener("click", async function () {
           await new Promise(function (r) { setTimeout(r, 1500); });
         }
       } catch (e) { fail(1003, e); return; }
+    } else {
+      /* "현재 브라우저 그대로" 여도 높이는 페이지 전체로 늘린다.
+         이걸 안 하면 화면 아래쪽은 지연 로딩(lazy) 이 안 걸려 그려지지 않아 캡처가 모니터 높이에서 잘린다.
+         너비는 그대로 두므로 레이아웃은 지금 보시는 그대로다. */
+      try {
+        if (chrome.debugger) {
+          setStatus(T("resizing"), "");
+          var sz = await chrome.scripting.executeScript({
+            target: { tabId: tabId },
+            func: function () {
+              window.scrollTo(0, 0);
+              var h = Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0);
+              var els = document.querySelectorAll("body, body > *, #root, #app, #app-root, main");
+              for (var i = 0; i < els.length; i++) h = Math.max(h, els[i].scrollHeight || 0);
+              return { w: window.innerWidth, h: window.innerHeight, full: h };
+            }
+          });
+          var s = sz && sz[0] && sz[0].result;
+          if (s && s.full > s.h + 40) {
+            await dbgAttach(tabId);
+            attached = true;
+            await dbg(tabId, "Emulation.setDeviceMetricsOverride",
+              { width: s.w, height: Math.min(s.full, 20000), deviceScaleFactor: 0, mobile: false });
+            await new Promise(function (r) { setTimeout(r, 1500); });
+          }
+        }
+      } catch (e) { console.warn("[figma-clipboard] 높이 늘리기 실패 — 보이는 만큼만 캡처합니다", e); }
     }
 
     // 캡처
     var cap = null;
     try {
       setStatus(T("capturing"), "");
+      /* capture.js를 ES 모듈로 동적 import 해서 결과를 바로 받는다.
+         픽커(picker.js)도 같은 모듈을 쓰므로 캡처 로직이 한 곳에만 있다. */
       cap = await runCapture(tabId, sel, vw);
       if (!cap || !cap.root) throw new Error("no capture result");
     } catch (e) { fail(1004, e); return; }
@@ -373,10 +451,12 @@ document.getElementById("copy").addEventListener("click", async function () {
   }
 });
 
-/* ═══ 초기화: 언어·선택영역 복원 ═══ */
+
+/* ═══ 초기화: 언어·선택영역 복원 + 새 버전 확인 ═══ */
 chrome.storage.local.get(["lang", "pickedSelector", "pickedDesc"], function (st) {
   if (st.lang && I18N[st.lang]) lang = st.lang;
   if (st.pickedSelector) picked = { selector: st.pickedSelector, desc: st.pickedDesc || st.pickedSelector };
   applyLang();
   renderChip();
+  checkUpdate();
 });

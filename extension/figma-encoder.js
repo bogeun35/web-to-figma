@@ -85,6 +85,133 @@ function parseColor(str) {
 }
 const solidPaint = c => ({ type: "SOLID", color: { r: c.r, g: c.g, b: c.b, a: 1 }, opacity: c.a, visible: true, blendMode: "NORMAL" });
 
+/* 괄호 밖 콤마로만 분리 — rgba(0,0,0,.1) 안의 콤마에 걸리지 않게 */
+function splitTop(s) {
+  const out = []; let depth = 0, cur = "";
+  for (const ch of String(s)) {
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    if (ch === "," && depth === 0) { if (cur.trim()) out.push(cur.trim()); cur = ""; continue; }
+    cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+
+/* ── box-shadow → 피그마 effects ──────────────────────────────
+   computed style 형태: "rgba(0, 0, 0, 0.1) 0px 1px 3px 0px" (여러 개는 콤마 구분, inset 포함 가능) */
+function parseShadows(str) {
+  if (!str) return [];
+  const out = [];
+  for (const part of splitTop(str)) {
+    const cm = part.match(/rgba?\([^)]*\)|#[0-9a-fA-F]{3,8}/);
+    const c = cm ? parseColor(cm[0]) : { r: 0, g: 0, b: 0, a: 0.25 };
+    if (!c) continue;
+    const nums = (part.replace(/rgba?\([^)]*\)/g, "").match(/-?\d*\.?\d+px/g) || []).map(v => parseFloat(v));
+    const x = nums[0] || 0, y = nums[1] || 0, blur = nums[2] || 0, spread = nums[3] || 0;
+    if (!x && !y && !blur && !spread) continue;
+    out.push({
+      type: /\binset\b/.test(part) ? "INNER_SHADOW" : "DROP_SHADOW",
+      color: { r: c.r, g: c.g, b: c.b, a: c.a },
+      offset: { x: x, y: y }, radius: Math.max(0, blur), spread: spread,
+      visible: true, blendMode: "NORMAL", showShadowBehindNode: false
+    });
+  }
+  return out;
+}
+
+/* ── linear-gradient → 피그마 GRADIENT_LINEAR ──────────────────
+   방향은 위/오른쪽/아래/왼쪽 네 방향으로 맞춘다(대각선은 가장 가까운 방향). radial 은 아직 안 다룬다. */
+function gradTransform(deg) {
+  const a = ((deg % 360) + 360) % 360;
+  if (a >= 315 || a < 45) return { m00: 0, m01: -1, m02: 1, m10: 1, m11: 0, m12: 0 };  // 아래→위
+  if (a < 135)            return { m00: 1, m01: 0, m02: 0, m10: 0, m11: 1, m12: 0 };   // 왼→오른쪽
+  if (a < 225)            return { m00: 0, m01: 1, m02: 0, m10: -1, m11: 0, m12: 1 };  // 위→아래 (CSS 기본)
+  return { m00: -1, m01: 0, m02: 1, m10: 0, m11: 1, m12: 0 };                          // 오른→왼쪽
+}
+
+function parseGradient(str) {
+  if (!str) return null;
+  const s = String(str).trim();
+  const m = s.match(/^(repeating-)?linear-gradient\(([\s\S]*)\)$/);
+  if (!m) return null;                      // radial/conic 은 건너뜀 → 단색 배경 유지
+  const parts = splitTop(m[2]);
+  if (!parts.length) return null;
+  let angle = 180;                          // CSS 기본값 = to bottom
+  if (/^(to\s|-?\d+(\.\d+)?(deg|turn|rad))/i.test(parts[0])) {
+    const head = parts.shift();
+    const dm = head.match(/(-?\d+(?:\.\d+)?)deg/i);
+    if (dm) angle = parseFloat(dm[1]);
+    else if (/to\s+top/i.test(head)) angle = 0;
+    else if (/to\s+right/i.test(head)) angle = 90;
+    else if (/to\s+bottom/i.test(head)) angle = 180;
+    else if (/to\s+left/i.test(head)) angle = 270;
+  }
+  const stops = [];
+  for (const p of parts) {
+    const cm = p.match(/rgba?\([^)]*\)|#[0-9a-fA-F]{3,8}|\b[a-z]+\b/i);
+    if (!cm) continue;
+    const c = parseColor(cm[0]);
+    if (!c) continue;
+    const pm = p.match(/(-?\d+(?:\.\d+)?)%/);
+    stops.push({ color: { r: c.r, g: c.g, b: c.b, a: c.a }, position: pm ? parseFloat(pm[1]) / 100 : null });
+  }
+  if (stops.length < 2) return null;
+  if (stops[0].position === null) stops[0].position = 0;
+  if (stops[stops.length - 1].position === null) stops[stops.length - 1].position = 1;
+  for (let i = 1; i < stops.length - 1; i++) if (stops[i].position === null) stops[i].position = i / (stops.length - 1);
+  return { type: "GRADIENT_LINEAR", stops: stops, transform: gradTransform(angle), opacity: 1, visible: true, blendMode: "NORMAL" };
+}
+
+/* ── flex → 피그마 Auto Layout ────────────────────────────────
+   받아서 바로 편집할 수 있게 만드는 게 목적이라, 실제 좌표가 Auto Layout 결과와
+   일치하는 경우에만 적용한다. 간격이 들쭉날쭉하거나(grow/space 분배) 겹치면 절대좌표로 둔다. */
+/* stackPrimaryAlignItems = StackJustify (MIN/CENTER/MAX/SPACE_*)
+   stackCounterAlignItems = StackAlign   (MIN/CENTER/MAX/BASELINE — STRETCH 없음)
+   CSS 의 stretch·normal 은 대응값이 없어 MIN 으로 둔다. 자식 크기는 캡처값 그대로 고정이라 그림은 같다. */
+const JUSTIFY_MAP = { "flex-start": "MIN", "start": "MIN", "left": "MIN", "center": "CENTER", "flex-end": "MAX", "end": "MAX", "right": "MAX", "space-between": "SPACE_BETWEEN", "space-around": "SPACE_AROUND", "space-evenly": "SPACE_EVENLY" };
+const ALIGN_MAP = { "flex-start": "MIN", "start": "MIN", "center": "CENTER", "flex-end": "MAX", "end": "MAX", "baseline": "BASELINE", "stretch": "MIN", "normal": "MIN" };
+
+function applyAutoLayout(nc, node) {
+  const L = node.layout || {};
+  if (!/flex/.test(L.display || "")) return false;
+  if ((L.wrap || "nowrap") !== "nowrap") return false;
+  const kids = (node.children || []).filter(Boolean);
+  if (kids.length < 2) return false;
+  const col = /column/.test(L.dir || "row");
+  const pad = Array.isArray(L.pad) ? L.pad : [0, 0, 0, 0];
+  const gap = Math.max(0, (col ? (L.rowGap || L.gap) : (L.colGap || L.gap)) || 0);
+
+  const sorted = kids.slice().sort((a, b) => (col ? (a.y - b.y) : (a.x - b.x)));
+  const start = col ? node.y + pad[0] : node.x + pad[3];
+  const first = col ? sorted[0].y : sorted[0].x;
+  if (Math.abs(first - start) > 1.5) return false;               // 시작 위치가 패딩과 안 맞음
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1], cur = sorted[i];
+    const prevEnd = col ? prev.y + (prev.h || 0) : prev.x + (prev.w || 0);
+    const curStart = col ? cur.y : cur.x;
+    if (Math.abs((curStart - prevEnd) - gap) > 1.5) return false; // 간격이 gap 과 다름
+  }
+
+  node.children = sorted;                                        // 피그마는 자식 순서대로 배치한다
+  nc.stackMode = col ? "VERTICAL" : "HORIZONTAL";
+  nc.stackSpacing = gap;
+  nc.stackVerticalPadding = pad[0];
+  nc.stackPaddingBottom = pad[2];
+  nc.stackHorizontalPadding = pad[3];
+  nc.stackPaddingRight = pad[1];
+  nc.stackPrimarySizing = "FIXED";
+  nc.stackCounterSizing = "FIXED";
+  /* 스키마에 없는 값이 하나라도 들어가면 복사 전체가 실패한다 → 허용값만 통과시킨다 */
+  const J_OK = ["MIN", "CENTER", "MAX", "SPACE_BETWEEN", "SPACE_AROUND", "SPACE_EVENLY"];
+  const A_OK = ["MIN", "CENTER", "MAX", "BASELINE"];
+  const j = JUSTIFY_MAP[L.justify], a = ALIGN_MAP[L.align];
+  nc.stackPrimaryAlignItems = J_OK.indexOf(j) >= 0 ? j : "MIN";
+  nc.stackCounterAlignItems = A_OK.indexOf(a) >= 0 ? a : "MIN";
+  nc.stackWrap = "NO_WRAP";
+  return true;
+}
+
 const DIRTY = ["styleIdForFill", "styleIdForStroke", "styleId", "derivedTextData",
   "isPublishable", "key", "publishID", "styleType", "componentKey", "overrideKey",
   "fillGeometry", "strokeGeometry", "vectorData", "symbolData", "styleReferences"];
@@ -166,7 +293,7 @@ export async function buildClipboardHtml(cap, opts) {
         if (!cacheByWeight.has(wk)) cacheByWeight.set(wk, new Map());
         const fontSize = tx.size || 13;
         const baked = bakeText(font, chars, fontSize, tx.lh || 0, sampleBlobCount + newBlobs.length, cacheByWeight.get(wk),
-          { lsPx: tx.ls || 0, maxW: node.w || 0 });   // 자간 + 박스 너비 줄바꿈(삐짐 방지)
+          { lsPx: tx.ls || 0, maxW: node.w || 0, boxH: node.h || 0 });   // 자간 + 박스 너비 줄바꿈(삐짐 방지) + 상자 높이(세로 위치 기준)
         for (const b of baked.blobs) newBlobs.push(b);
         nc.derivedTextData = {
           layoutSize: baked.layoutSize,
@@ -244,7 +371,10 @@ export async function buildClipboardHtml(cap, opts) {
     const nc = baseFrom(T_FRAME, node, parentGuid, sibIdx, absX, absY);
     const st = node.styles || {};
     const bg = parseColor(st.bg || node.bg || node.fill);
-    nc.fillPaints = bg ? [solidPaint(bg)] : [];
+    /* 배경 — 그라디언트가 있으면 그것을 쓰고(단색 위에 얹음), 없으면 단색 */
+    const grad = parseGradient(st.gradient);
+    if (grad) nc.fillPaints = bg && bg.a > 0 ? [solidPaint(bg), grad] : [grad];
+    else nc.fillPaints = bg ? [solidPaint(bg)] : [];
     const rad = Array.isArray(st.radius) ? st.radius : (typeof st.radius === "number" ? [st.radius, st.radius, st.radius, st.radius] : null);
     if (rad && rad.some(r => r > 0)) {
       if (rad[0] === rad[1] && rad[1] === rad[2] && rad[2] === rad[3]) nc.cornerRadius = rad[0];
@@ -252,8 +382,21 @@ export async function buildClipboardHtml(cap, opts) {
     }
     const border = parseColor(st.borderColor);
     if (border && st.borderWidth > 0) { nc.strokePaints = [solidPaint(border)]; nc.strokeWeight = st.borderWidth; }
-    if (node.type === "IMAGE" && !bg) nc.fillPaints = [solidPaint(parseColor(node.avg) || { r: 0.9, g: 0.91, b: 0.93, a: 1 })];  // 평균색 플레이스홀더
-    nc.stackMode = "NONE";
+    /* 이미지·아이콘 — 클립보드로는 실제 픽셀을 넣을 수 없다(피그마가 해시만 받는다).
+       기획 와이어프레임처럼 회색 블록으로 자리만 표시한다. 나중에 그 자리에 실제 그림을 올리면 된다. */
+    if (node.type === "IMAGE") {
+      nc.fillPaints = [solidPaint({ r: 0.925, g: 0.933, b: 0.945, a: 1 })];   // #ECEEF1
+      nc.strokePaints = [solidPaint({ r: 0.79, g: 0.808, b: 0.839, a: 1 })];  // #C9CED6
+      nc.strokeWeight = 1;
+    }
+    /* 그림자 */
+    const fx = parseShadows(st.shadow);
+    if (fx.length) nc.effects = fx;
+    /* flex → Auto Layout (조건이 맞을 때만, 아니면 절대좌표 유지) */
+    if (!applyAutoLayout(nc, node)) nc.stackMode = "NONE";
+    /* 잘라내기는 켜지 않는다.
+       켜보니 말줄임(...)으로 처리된 글자가 상자 끝에서 통째로 잘려 읽을 수 없었다.
+       그림이 상자 밖으로 튀어나오는 문제는 캡처 단계에서 상자를 깎는 방식으로 이미 막았다. */
     nc.frameMaskDisabled = true;
     out.push(nc);
     if (node.children && node.children.length) node.children.forEach((ch, i) => walk(ch, nc.guid, i, node.x || 0, node.y || 0));
